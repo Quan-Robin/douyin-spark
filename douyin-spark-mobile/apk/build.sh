@@ -18,6 +18,7 @@ AAPT2="$BT/aapt2.exe"
 JAVAC="$JDK/bin/javac.exe"
 D8="$BT/d8.bat"
 JAR="$JDK/bin/jar.exe"
+JAVA="$JDK/bin/java.exe"
 ZIPALIGN="$BT/zipalign.exe"
 KEYTOOL="$JDK/bin/keytool.exe"
 APKSIGNER="$BT/apksigner.bat"
@@ -57,7 +58,16 @@ find src build/gen -name "*.java" > build/sources.txt
 
 echo "[4/7] d8 转 dex"
 find build/obj -name "*.class" > build/classes.txt
-"$D8" --release --lib "$PLATFORM" --output build/dex @build/classes.txt
+# 默认走 R8(裁剪 + 混淆,实测 dex 小约 19%);规则见 proguard-rules.pro,
+# 里面保住了清单声明的组件和 @JavascriptInterface 方法。
+# 真机上万一出现异常,用  NO_SHRINK=1 bash build.sh  可回退到纯 d8。
+if [ "${NO_SHRINK:-0}" = "1" ]; then
+    echo "  (NO_SHRINK=1:使用 d8,不做裁剪)"
+    "$D8" --release --min-api 24 --lib "$PLATFORM" --output build/dex @build/classes.txt
+else
+    "$JAVA" -cp "$BT/lib/d8.jar" com.android.tools.r8.R8 --release --min-api 24 \
+        --lib "$PLATFORM" --output build/dex --pg-conf proguard-rules.pro @build/classes.txt
+fi
 
 echo "[5/7] 打入 classes.dex"
 cp build/dex/classes.dex build/apk/

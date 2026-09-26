@@ -170,6 +170,37 @@ public class Prefs {
         return true;
     }
 
+    // ---- 首次使用引导 ----
+
+    /** 是否已看过首次使用引导。 */
+    public boolean onboarded() {
+        return sp.getBoolean("onboarded", false);
+    }
+
+    public void setOnboarded(boolean v) {
+        sp.edit().putBoolean("onboarded", v).apply();
+    }
+
+    /** 自启动/后台弹出无法用 API 查询,由用户在引导里点「我已设置好」后记下来。 */
+    public static boolean isSelfStartConfirmed(Context c) {
+        return c.getSharedPreferences("spark", Context.MODE_PRIVATE)
+                .getBoolean("selfstart_ok", false);
+    }
+
+    public static void setSelfStartConfirmed(Context c, boolean v) {
+        c.getSharedPreferences("spark", Context.MODE_PRIVATE)
+                .edit().putBoolean("selfstart_ok", v).apply();
+    }
+
+    /** 用户选择的推荐模式:true=协议模式,false=无障碍模式。 */
+    public boolean preferredProtocol() {
+        return sp.getBoolean("preferredProtocol", false);
+    }
+
+    public void setPreferredProtocol(boolean v) {
+        sp.edit().putBoolean("preferredProtocol", v).apply();
+    }
+
     public void setTimes(List<String> ts) {
         StringBuilder sb = new StringBuilder();
         for (String t : ts) {

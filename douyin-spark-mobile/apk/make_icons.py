@@ -133,15 +133,23 @@ def main() -> int:
     for name, px in DENSITIES.items():
         folder = os.path.join(HERE, "res", "mipmap-" + name)
         os.makedirs(folder, exist_ok=True)
-        for fname, im in (("ic_launcher.png", square), ("ic_launcher_round.png", round_icon)):
-            out = os.path.join(folder, fname)
+        # 只生成一张方形图标:启动器要圆形时会自己套遮罩,再存一份 ic_launcher_round
+        # 等于把图标体积翻倍(APK 里白白多 ~11KB)
+        for fname, im in (("ic_launcher", square),):
+            base = os.path.join(folder, fname)
             small = im.resize((px, px), Image.LANCZOS)
-            # 图标是有限色阶的图形,量化成 256 色能把体积压到 1/3 左右(仍保留透明通道)
+            # 图标是有限色阶的图形,量化成 256 色(保留透明通道)
             try:
                 small = small.quantize(colors=256, method=Image.FASTOCTREE)
             except Exception:
                 pass
-            small.save(out, "PNG", optimize=True)
+            # 用 WebP 而不是 PNG:同画质体积约为 PNG 的 1/3(Android 4.3+ 原生支持)
+            out = base + ".webp"
+            small.save(out, "WEBP", quality=95, method=6)
+            # 清掉同名旧 PNG,否则 aapt2 会报资源重复
+            stale = base + ".png"
+            if os.path.exists(stale):
+                os.remove(stale)
             written.append(os.path.relpath(out, HERE))
     print("已生成 %d 个图标文件,例如 %s" % (len(written), written[0]))
     return 0

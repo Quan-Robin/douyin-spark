@@ -15,6 +15,7 @@ import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -42,7 +43,12 @@ public class MainActivity extends Activity {
     private static final String[] RAIL_ICONS = {"🏠", "📱", "🌐", "⚙️", "ℹ️"};
 
     private LinearLayout rail;
-    private TextView[] railItems = new TextView[5];
+    private View[] railItems = new View[5];
+    private static final int[] RAIL_DRAWABLES = {
+            R.drawable.ic_home, R.drawable.ic_phone, R.drawable.ic_globe,
+            R.drawable.ic_settings, R.drawable.ic_info
+    };
+    private TextView tvChipMode, tvChipA11y, tvChipOverlay;
     private View[] pages = new View[5];
     private TextView tvTitle, tvBack, tvHomeStatus, aStatus, pStatus;
     private int current = PG_HOME;
@@ -88,6 +94,15 @@ public class MainActivity extends Activity {
             checkUpdate(false);
         }
         showPage(PG_HOME);
+        // 首次使用:直接进引导(模式选择 + 按厂商的权限清单)
+        if (!new Prefs(this).onboarded()) {
+            startActivity(new Intent(this, OnboardingActivity.class));
+        }
+    }
+
+    /** 手动打开首次使用引导(首页入口)。 */
+    private void openOnboarding() {
+        startActivity(new Intent(this, OnboardingActivity.class));
     }
 
     // ================================================================ 外壳
@@ -150,16 +165,18 @@ public class MainActivity extends Activity {
                 Ui.dp(this, 56), ViewGroup.LayoutParams.MATCH_PARENT);
         rlp.rightMargin = Ui.dp(this, 10);
 
-        for (int i = 0; i < RAIL_ICONS.length; i++) {
+        for (int i = 0; i < RAIL_DRAWABLES.length; i++) {
             final int idx = i;
-            TextView item = new TextView(this);
-            item.setText(RAIL_ICONS[i]);
-            item.setTextSize(20);
-            item.setGravity(Gravity.CENTER);
+            ImageView item = new ImageView(this);
+            item.setImageResource(RAIL_DRAWABLES[i]);
+            item.setColorFilter(Ui.TEXT_SUB);
+            item.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            int inner = Ui.dp(this, 22);
+            item.setPadding(0, 0, 0, 0);
             LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(
                     Ui.dp(this, 44), Ui.dp(this, 44));
             if (i > 0) {
-                ip.topMargin = Ui.dp(this, 10);
+                ip.topMargin = Ui.dp(this, 8);
             }
             item.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -196,10 +213,12 @@ public class MainActivity extends Activity {
             pages[i].setVisibility(i == pg ? View.VISIBLE : View.GONE);
         }
         for (int i = 0; i < railItems.length; i++) {
-            if (i == pg) {
-                railItems[i].setBackground(Ui.rounded(0xFFFFFFFF, 12, this));
-            } else {
-                railItems[i].setBackground(null);
+            boolean on = i == pg;
+            railItems[i].setBackground(on ? Ui.rounded(0xFFFFFFFF, 12, this) : null);
+            if (railItems[i] instanceof ImageView) {
+                ((ImageView) railItems[i]).setColorFilter(on ? Ui.PRIMARY : Ui.TEXT_SUB);
+            } else if (railItems[i] instanceof TextView) {
+                ((TextView) railItems[i]).setTextColor(on ? Ui.PRIMARY : Ui.TEXT_SUB);
             }
         }
         tvBack.setVisibility(pg == PG_HOME ? View.GONE : View.VISIBLE);
@@ -322,50 +341,56 @@ public class MainActivity extends Activity {
         root.setPadding(pad, pad, pad, pad);
         sc.addView(root, lpFull());
 
-        LinearLayout stCard = card();
+        // ---- 状态卡 ----
+        LinearLayout stCard = Ui.card(this);
+        LinearLayout head = Ui.row(this);
+        head.addView(Ui.icon(this, R.mipmap.ic_launcher, 40));
+        LinearLayout headTexts = Ui.column(this);
+        TextView ht = new TextView(this);
+        ht.setText("续火花");
+        ht.setTextSize(18);
+        ht.setTypeface(Typeface.DEFAULT_BOLD);
+        ht.setTextColor(Ui.TEXT_MAIN);
+        headTexts.addView(ht);
+        headTexts.addView(Ui.label(this, "每天自动给好友发消息,维持火花不断"));
+        LinearLayout.LayoutParams hlp = new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        hlp.leftMargin = Ui.dp(this, 10);
+        head.addView(headTexts, hlp);
+        stCard.addView(head, Ui.match());
+
+        LinearLayout chips = Ui.row(this);
+        chips.setPadding(0, Ui.dp(this, 10), 0, 0);
+        tvChipMode = Ui.chip(this, "模式", Ui.tint(Ui.PRIMARY, 0.12f), Ui.PRIMARY);
+        tvChipA11y = Ui.chip(this, "无障碍", Ui.INPUT_BG, Ui.TEXT_SUB);
+        tvChipOverlay = Ui.chip(this, "悬浮窗", Ui.INPUT_BG, Ui.TEXT_SUB);
+        chips.addView(tvChipMode);
+        LinearLayout.LayoutParams c1 = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        c1.leftMargin = Ui.dp(this, 6);
+        chips.addView(tvChipA11y, c1);
+        LinearLayout.LayoutParams c2 = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        c2.leftMargin = Ui.dp(this, 6);
+        chips.addView(tvChipOverlay, c2);
+        stCard.addView(chips, Ui.match());
+
         tvHomeStatus = Ui.statusBox(this, "");
-        stCard.addView(tvHomeStatus);
-        root.addView(stCard);
-        root.addView(Ui.spacer(this, 14));
+        LinearLayout.LayoutParams slp = Ui.match();
+        slp.topMargin = Ui.dp(this, 10);
+        stCard.addView(tvHomeStatus, slp);
+        root.addView(stCard, lpFull());
+        root.addView(Ui.spacer(this, 12));
 
-        LinearLayout cardA = card();
-        TextView ta = txt("📱 无障碍模式", 17, Ui.TEXT_MAIN, true);
-        cardA.addView(ta);
-        TextView ba = txt("推荐 · 已验证可用", 11, Ui.PRIMARY, false);
-        cardA.addView(ba);
-        TextView da = txt("自动打开手机抖音操作发送。\n需要:开启无障碍 + 电池白名单;锁屏时自动亮屏解锁(密码锁可配 Root 解锁)。",
-                13, Color.DKGRAY, false);
-        da.setPadding(0, Ui.dp(this, 6), 0, 0);
-        cardA.addView(da);
-        cardA.setClickable(true);
-        cardA.setOnClickListener(new View.OnClickListener() {
+        // ---- 快捷操作 ----
+        LinearLayout actions = Ui.row(this);
+        Button btnRun = Ui.primary(this, "立即运行一次");
+        btnRun.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                showPage(PG_A11Y);
+                startRunner();
             }
         });
-        root.addView(cardA, lpFull());
-        root.addView(Ui.spacer(this, 14));
-
-        LinearLayout cardB = card();
-        TextView tb = txt("🌐 协议模式", 17, Ui.TEXT_MAIN, true);
-        cardB.addView(tb);
-        TextView bb = txt("实验性 · 完全后台", 11, Ui.PRIMARY, false);
-        cardB.addView(bb);
-        TextView db = txt("内嵌网页后台直发,全程不亮屏、无需无障碍。\n需要:网页登录一次(Cookie 长期保存)+ 悬浮窗权限;依赖设备 WebView 兼容性。",
-                13, Color.DKGRAY, false);
-        db.setPadding(0, Ui.dp(this, 6), 0, 0);
-        cardB.addView(db);
-        cardB.setClickable(true);
-        cardB.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                showPage(PG_PROTO);
-            }
-        });
-        root.addView(cardB, lpFull());
-        root.addView(Ui.spacer(this, 14));
-
         Button btnStop = Ui.danger(this, "停止运行");
         btnStop.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -374,10 +399,86 @@ public class MainActivity extends Activity {
                 Toast.makeText(MainActivity.this, "已请求停止,流程将在当前步骤后退出", Toast.LENGTH_LONG).show();
             }
         });
-        root.addView(btnStop, lpFull());
-        root.addView(Ui.spacer(this, 12));
-        root.addView(Ui.subtitle(this, "好友/消息/时间的配置在「基本设置」里,两种模式通用。"));
+        LinearLayout.LayoutParams alp = new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        actions.addView(btnRun, alp);
+        LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        blp.leftMargin = Ui.dp(this, 10);
+        actions.addView(btnStop, blp);
+        root.addView(actions, lpFull());
+        root.addView(Ui.spacer(this, 6));
+
+        // ---- 发送方式 ----
+        root.addView(Ui.section(this, "发送方式(点卡片进入对应页面)"));
+        root.addView(modeCard(false), lpFull());
+        root.addView(Ui.spacer(this, 8));
+        root.addView(modeCard(true), lpFull());
+
+        // ---- 帮助 ----
+        root.addView(Ui.section(this, "帮助"));
+        root.addView(Ui.listItem(this, R.drawable.ic_rocket, "首次使用引导",
+                "选模式 + 按机型逐项开权限(无障碍 / 自启动 / 电池优化 / 悬浮窗 / 精确闹钟)",
+                "打开", Ui.tint(Ui.PRIMARY, 0.12f), Ui.PRIMARY, new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        openOnboarding();
+                    }
+                }), lpFull());
+        root.addView(Ui.spacer(this, 8));
+        root.addView(Ui.listItem(this, R.drawable.ic_settings, "好友 / 消息 / 发送时间",
+                "两种模式通用;时间支持多个时间点,随机抖动 0-" + Scheduler.MAX_JITTER_MIN + " 分钟",
+                "去设置", Ui.INPUT_BG, Ui.TEXT_SUB, new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        showPage(PG_SETTINGS);
+                    }
+                }), lpFull());
+        root.addView(Ui.spacer(this, 8));
+        root.addView(Ui.listItem(this, R.drawable.ic_info, "关于与说明",
+                "版本信息、隐私说明、使用须知与免责声明", null, 0, 0, new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        showPage(PG_ABOUT);
+                    }
+                }), lpFull());
         return sc;
+    }
+
+    /** 首页上的模式卡片(带图标、说明与当前启用状态)。 */
+    private LinearLayout modeCard(final boolean protocol) {
+        Prefs p = new Prefs(this);
+        boolean active = p.protocolMode() == protocol;
+        LinearLayout card = Ui.clickableCard(this);
+        card.setBackground(Ui.stroked(Ui.CARD_BG, active ? Ui.PRIMARY : Ui.DIVIDER,
+                active ? 1.5f : 1f, 16, this));
+        LinearLayout top = Ui.row(this);
+        top.addView(Ui.icon(this, protocol ? R.drawable.ic_globe : R.drawable.ic_phone, 26, Ui.PRIMARY));
+        LinearLayout texts = Ui.column(this);
+        TextView t = new TextView(this);
+        t.setText(protocol ? "协议模式(实验性)" : "无障碍模式(推荐)");
+        t.setTextSize(15.5f);
+        t.setTypeface(Typeface.DEFAULT_BOLD);
+        t.setTextColor(Ui.TEXT_MAIN);
+        texts.addView(t);
+        texts.addView(Ui.subtitle(this, protocol
+                ? "内嵌网页后台发送:不亮屏、不需要无障碍。需网页登录一次 + 悬浮窗权限。"
+                : "用无障碍服务操作抖音 App:稳定、无需登录。需无障碍 + 电池白名单。"));
+        LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        tlp.leftMargin = Ui.dp(this, 10);
+        top.addView(texts, tlp);
+        top.addView(Ui.chip(this, active ? "使用中" : "切换",
+                active ? Ui.tint(Ui.OK, 0.15f) : Ui.INPUT_BG,
+                active ? Ui.OK : Ui.TEXT_SUB));
+        card.addView(top, Ui.match());
+        card.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                showPage(protocol ? PG_PROTO : PG_A11Y);
+            }
+        });
+        return card;
     }
 
     // ================================================================ 无障碍页
@@ -997,6 +1098,25 @@ public class MainActivity extends Activity {
         String st = p.todayState(today);
         sb.append("今日发送: ").append(st.isEmpty() ? "尚未执行" : st);
         tvHomeStatus.setText(sb.toString());
+
+        // 顶部状态徽章
+        if (tvChipMode != null) {
+            tvChipMode.setText(p.protocolMode() ? "协议模式" : "无障碍模式");
+        }
+        if (tvChipA11y != null) {
+            boolean a11y = SparkService.INSTANCE != null;
+            tvChipA11y.setText(a11y ? "无障碍已开启" : "无障碍未开启");
+            tvChipA11y.setBackground(Ui.rounded(
+                    a11y ? Ui.tint(Ui.OK, 0.15f) : Ui.tint(Ui.DANGER, 0.12f), 9, this));
+            tvChipA11y.setTextColor(a11y ? Ui.OK : Ui.DANGER);
+        }
+        if (tvChipOverlay != null) {
+            boolean ov = android.os.Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(this);
+            tvChipOverlay.setText(ov ? "悬浮窗已授权" : "悬浮窗未授权");
+            tvChipOverlay.setBackground(Ui.rounded(
+                    ov ? Ui.tint(Ui.OK, 0.15f) : Ui.tint(Ui.WARN, 0.15f), 9, this));
+            tvChipOverlay.setTextColor(ov ? Ui.OK : Ui.WARN);
+        }
     }
 
     private void refreshA11yStatus() {

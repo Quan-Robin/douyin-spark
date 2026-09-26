@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">续火花</string>
+    <string name="accessibility_label">续火花辅助</string>
+    <string name="accessibility_desc">用于自动打开抖音与好友聊天并发送续火花消息。本服务只在每天计划时间附近短暂运行,不会收集或上传任何数据。</string>
+</resources>

@@ -1,0 +1,11 @@
+# 仓库内统一用 LF,避免 Windows/Linux 协作者产生整文件 diff
+* text=auto eol=lf
+
+# 二进制文件不做换行转换、不参与 diff
+*.png binary
+*.jpg binary
+*.webp binary
+*.apk binary
+*.idsig binary
+*.keystore binary
+*.jar binary

@@ -1,0 +1,10 @@
+# 运行数据与调试 dump
+logs/
+spark_state.json
+sdcard-dump/
+
+# 构建产物与签名
+apk/build/
+SparkKeeper.apk
+SparkKeeper.apk.idsig
+apk/debug.keystore

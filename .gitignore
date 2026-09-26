@@ -1,0 +1,53 @@
+# ============================================================
+# 隐私与凭据(最高优先级:绝对不能提交)
+# ============================================================
+# 浏览器登录态:里面是完整的 Chrome profile,含抖音 Cookie / 历史记录
+douyin-spark-keeper/user_data/
+# 你的真实配置(好友名、消息内容)
+douyin-spark-keeper/config.yaml
+# 运行日志、失败截图、probe 结果(可能含聊天截图)
+douyin-spark-keeper/logs/
+# 当日发送记录(含好友昵称)
+douyin-spark-keeper/state.json
+
+# AutoX.js 脚本版的运行数据
+douyin-spark-mobile/logs/
+douyin-spark-mobile/spark_state.json
+
+# ============================================================
+# 构建产物
+# ============================================================
+douyin-spark-mobile/apk/build/
+douyin-spark-mobile/SparkKeeper.apk
+douyin-spark-mobile/SparkKeeper.apk.idsig
+# 调试签名(构建时用 keytool 自动重新生成,不必入库)
+douyin-spark-mobile/apk/debug.keystore
+
+# ============================================================
+# 与本项目无关的内容
+# 注意:D:\AI\DSH 是共用工作目录,里面还有 wallpaper-schedule 等其他项目。
+# 如果你在仓库根目录执行 git add .,这些会被一起提交 —— 必须排除。
+# (更稳妥的做法:把 douyin-spark-keeper / douyin-spark-mobile 单独放到一个
+#  目录再 git init,见 docs/publishing-checklist.md)
+# ============================================================
+legacy/
+tests/
+wallpaper-schedule/
+.tmp-*/
+DOCS-README.md
+debug.log
+
+# ============================================================
+# 其他
+# ============================================================
+__pycache__/
+*.pyc
+.venv/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+.review-scratch/
+.fix-build/
+# 本地工具(便携版 gh 等,不属于仓库内容)
+.tools/

@@ -1,0 +1,9 @@
+# 登录态与运行数据(含隐私)
+user_data/
+logs/
+state.json
+config.yaml
+
+__pycache__/
+*.pyc
+.venv/

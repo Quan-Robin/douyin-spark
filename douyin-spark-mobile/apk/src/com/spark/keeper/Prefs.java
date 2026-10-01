@@ -353,6 +353,24 @@ public class Prefs {
         return sp.getBoolean("autoCheckUpdate", true);
     }
 
+    /** 用户点过「忽略此版本」的版本号;自动检查会跳过它(手动检查仍然提示)。 */
+    public String ignoredUpdateVersion() {
+        return sp.getString("ignoredUpdateVersion", "");
+    }
+
+    public void setIgnoredUpdateVersion(String v) {
+        sp.edit().putString("ignoredUpdateVersion", v == null ? "" : v).apply();
+    }
+
+    /** 上次检查更新的时间;自动检查 24 小时内只做一次。 */
+    public long lastUpdateCheck() {
+        return sp.getLong("lastUpdateCheck", 0L);
+    }
+
+    public void setLastUpdateCheck(long t) {
+        sp.edit().putLong("lastUpdateCheck", t).apply();
+    }
+
     public void setAutoCheckUpdate(boolean v) {
         sp.edit().putBoolean("autoCheckUpdate", v).apply();
     }

@@ -36,7 +36,17 @@ import java.util.Locale;
  */
 public class MainActivity extends Activity {
 
-    private static final String UPDATE_URL = "";
+    /**
+     * 更新源:先 Gitee(国内快),失败再试 GitHub。两者都是 releases/latest 接口,
+     * 只返回正式版(不含预发布),字段名基本一致,用同一段解析。
+     */
+    private static final String[] UPDATE_APIS = {
+            "https://gitee.com/api/v5/repos/quan-robin/douyin-spark/releases/latest",
+            "https://api.github.com/repos/Quan-Robin/douyin-spark/releases/latest",
+    };
+    private static final String UPDATE_PAGE = "https://github.com/Quan-Robin/douyin-spark/releases/latest";
+    /** 自动检查的间隔:一天一次,别每次启动都发请求。 */
+    private static final long AUTO_CHECK_INTERVAL = 24L * 60 * 60 * 1000;
 
     private static final int PG_HOME = 0, PG_A11Y = 1, PG_PROTO = 2, PG_SETTINGS = 3, PG_ABOUT = 4;
     private static final String[] TITLES = {"续火花", "📱 无障碍模式", "🌐 协议模式", "⚙️ 基本设置", "ℹ️ 关于"};
@@ -664,7 +674,7 @@ public class MainActivity extends Activity {
         LinearLayout cardGen = card();
         cardGen.addView(Ui.section(this, "通用"));
         sAutoUpdate = new CheckBox(this);
-        sAutoUpdate.setText("自动检查更新(启动时静默检查)");
+        sAutoUpdate.setText("自动检查更新(每天一次,可忽略某个版本)");
         sAutoUpdate.setTextSize(13);
         cardGen.addView(sAutoUpdate);
         root.addView(cardGen);
@@ -867,57 +877,218 @@ public class MainActivity extends Activity {
     }
 
     // ================================================================ 更新(预留)
-    private void checkUpdate(final boolean manual) {
-        if (UPDATE_URL == null || UPDATE_URL.isEmpty()) {
-            if (manual) {
-                Toast.makeText(this, "更新服务暂未配置(预留接口)", Toast.LENGTH_SHORT).show();
+    /** "v0.3.2" / "0.3.2" → {0,3,2};解析失败返回 null。 */
+    private static int[] parseVersion(String s) {
+        if (s == null) {
+            return null;
+        }
+        String t = s.trim();
+        if (t.startsWith("v") || t.startsWith("V")) {
+            t = t.substring(1);
+        }
+        String[] parts = t.split("\\.");
+        if (parts.length < 2) {
+            return null;
+        }
+        int[] v = new int[3];
+        try {
+            for (int i = 0; i < 3 && i < parts.length; i++) {
+                StringBuilder d = new StringBuilder();
+                for (int j = 0; j < parts[i].length(); j++) {
+                    char c = parts[i].charAt(j);
+                    if (!Character.isDigit(c)) {
+                        break;
+                    }
+                    d.append(c);
+                }
+                if (d.length() == 0) {
+                    return null;
+                }
+                v[i] = Integer.parseInt(d.toString());
             }
+        } catch (Exception e) {
+            return null;
+        }
+        return v;
+    }
+
+    /** a>b 返回正数,a<b 返回负数,相等 0。 */
+    private static int cmpVersion(int[] a, int[] b) {
+        for (int i = 0; i < 3; i++) {
+            if (a[i] != b[i]) {
+                return a[i] - b[i];
+            }
+        }
+        return 0;
+    }
+
+    /** 从 release JSON 里挑出 APK 下载地址(没有就返回 null,由调用方退回发布页)。 */
+    private static String findApkUrl(JSONObject rel) {
+        try {
+            org.json.JSONArray assets = rel.optJSONArray("assets");
+            if (assets == null) {
+                return null;
+            }
+            for (int i = 0; i < assets.length(); i++) {
+                JSONObject a = assets.optJSONObject(i);
+                if (a == null) {
+                    continue;
+                }
+                String name = a.optString("name", "");
+                String url = a.optString("browser_download_url", "");
+                if (!url.isEmpty() && (name.endsWith(".apk") || name.contains("SparkKeeper"))) {
+                    return url;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    private void openUrl(String url) {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)));
+        } catch (Exception e) {
+            Toast.makeText(this, "打不开链接,请手动访问:\n" + url, Toast.LENGTH_LONG).show();
+        }
+    }
+
+    /** 弹窗:发现新版本 → 去下载 / 忽略此版本 / 以后再说。 */
+    private void showUpdateDialog(final String tag, String name, String body,
+                                  final String apkUrl, final String pageUrl) {
+        String note = body == null ? "" : body.trim();
+        if (note.length() > 500) {
+            note = note.substring(0, 500) + "…";
+        }
+        String msg = (name == null || name.isEmpty() || name.equals(tag) ? "" : name + "\n\n") + note;
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("发现新版本 " + tag)
+                .setMessage(msg.isEmpty() ? "有新版本可以更新。" : msg)
+                .setPositiveButton("去下载", new android.content.DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        openUrl(apkUrl != null && !apkUrl.isEmpty() ? apkUrl : pageUrl);
+                    }
+                })
+                .setNeutralButton("忽略此版本", new android.content.DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(android.content.DialogInterface d, int w) {
+                        new Prefs(MainActivity.this).setIgnoredUpdateVersion(tag);
+                        Toast.makeText(MainActivity.this, "已忽略 " + tag + ",下次有新版本再提醒",
+                                Toast.LENGTH_SHORT).show();
+                    }
+                })
+                .setNegativeButton("以后再说", null)
+                .show();
+    }
+
+    /**
+     * 检查更新:先 Gitee 再 GitHub,比较 tag 与当前版本号。
+     * 自动检查每天最多一次;手动检查失败会明确报错(自动检查静默写日志)。
+     */
+    private void checkUpdate(final boolean manual) {
+        final Prefs p = new Prefs(this);
+        if (!manual && System.currentTimeMillis() - p.lastUpdateCheck() < AUTO_CHECK_INTERVAL) {
             return;
         }
+        int curCode = 0;
+        String curName = "";
+        try {
+            android.content.pm.PackageInfo pi =
+                    getPackageManager().getPackageInfo(getPackageName(), 0);
+            curCode = pi.versionCode;
+            curName = pi.versionName;
+        } catch (Exception ignored) {
+        }
+        final int[] cur = parseVersion(curName);
+        final String curLabel = curName == null || curName.isEmpty() ? ("(" + curCode + ")") : curName;
         new Thread(new Runnable() {
             @Override
             public void run() {
-                try {
-                    HttpURLConnection conn = (HttpURLConnection) new URL(UPDATE_URL).openConnection();
-                    conn.setConnectTimeout(8000);
-                    conn.setReadTimeout(8000);
-                    BufferedReader br = new BufferedReader(new InputStreamReader(conn.getInputStream(), "UTF-8"));
-                    StringBuilder sb = new StringBuilder();
-                    String line;
-                    while ((line = br.readLine()) != null) {
-                        sb.append(line);
-                    }
-                    br.close();
-                    JSONObject obj = new JSONObject(sb.toString());
-                    final int newCode = obj.optInt("versionCode", 0);
-                    final String url = obj.optString("url", "");
-                    final String note = obj.optString("note", "");
-                    int cur = 1;
+                String json = null;
+                String err = "";
+                for (String api : UPDATE_APIS) {
+                    HttpURLConnection conn = null;
                     try {
-                        cur = getPackageManager().getPackageInfo(getPackageName(), 0).versionCode;
-                    } catch (Exception ignored) {
-                    }
-                    final boolean has = newCode > cur;
-                    runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            if (has) {
-                                Toast.makeText(MainActivity.this, "发现新版本!" + note, Toast.LENGTH_LONG).show();
-                                try {
-                                    startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)));
-                                } catch (Exception ignored) {
-                                }
-                            } else if (manual) {
-                                Toast.makeText(MainActivity.this, "已是最新版本", Toast.LENGTH_SHORT).show();
+                        conn = (HttpURLConnection) new URL(api).openConnection();
+                        conn.setConnectTimeout(8000);
+                        conn.setReadTimeout(8000);
+                        // GitHub API 不带 User-Agent 会直接 403
+                        conn.setRequestProperty("User-Agent", "SparkKeeper/" + curLabel);
+                        conn.setRequestProperty("Accept", "application/json");
+                        if (conn.getResponseCode() == 200) {
+                            BufferedReader br = new BufferedReader(
+                                    new InputStreamReader(conn.getInputStream(), "UTF-8"));
+                            StringBuilder sb = new StringBuilder();
+                            String line;
+                            while ((line = br.readLine()) != null) {
+                                sb.append(line);
                             }
+                            br.close();
+                            json = sb.toString();
+                            break;
                         }
-                    });
-                } catch (Exception e) {
+                        err = "HTTP " + conn.getResponseCode();
+                    } catch (Exception e) {
+                        err = String.valueOf(e.getMessage());
+                    } finally {
+                        if (conn != null) {
+                            conn.disconnect();
+                        }
+                    }
+                }
+                final String failMsg = err;
+                if (json == null) {
+                    Prefs.appendLog(MainActivity.this, "检查更新失败: " + failMsg);
                     if (manual) {
                         runOnUiThread(new Runnable() {
                             @Override
                             public void run() {
-                                Toast.makeText(MainActivity.this, "检查更新失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                                Toast.makeText(MainActivity.this,
+                                        "检查更新失败(网络或更新源不可达):" + failMsg,
+                                        Toast.LENGTH_LONG).show();
+                            }
+                        });
+                    }
+                    return;
+                }
+                p.setLastUpdateCheck(System.currentTimeMillis());
+                try {
+                    final JSONObject rel = new JSONObject(json);
+                    final String tag = rel.optString("tag_name", "");
+                    final String name = rel.optString("name", "");
+                    final String body = rel.optString("body", "");
+                    final String apkUrl = findApkUrl(rel);
+                    String page = rel.optString("html_url", "");
+                    if (page.isEmpty()) {
+                        page = UPDATE_PAGE;
+                    }
+                    final String pageUrl = page;
+                    final int[] remote = parseVersion(tag);
+                    boolean newer = remote != null && cur != null && cmpVersion(remote, cur) > 0;
+                    final boolean ignored = tag.equals(p.ignoredUpdateVersion());
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (newer) {
+                                if (ignored && !manual) {
+                                    return; // 用户已忽略这个版本,自动检查不再打扰
+                                }
+                                showUpdateDialog(tag, name, body, apkUrl, pageUrl);
+                            } else if (manual) {
+                                Toast.makeText(MainActivity.this,
+                                        "已是最新版本(v" + curLabel + ")",
+                                        Toast.LENGTH_SHORT).show();
+                            }
+                        }
+                    });
+                } catch (Exception e) {
+                    Prefs.appendLog(MainActivity.this, "解析更新信息失败: " + e);
+                    if (manual) {
+                        runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                Toast.makeText(MainActivity.this, "更新信息解析失败", Toast.LENGTH_SHORT).show();
                             }
                         });
                     }

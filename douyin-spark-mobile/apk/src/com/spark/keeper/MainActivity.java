@@ -76,6 +76,17 @@ public class MainActivity extends Activity {
     private TimeRowsEditor timeEditor;
     private EditText sPin;
     private TextView tvRootStatus;
+    private TextView tvSettingsHint;
+    /** 回填设置页时抑制监听器,避免 setChecked/setText 触发一轮自动保存 */
+    private boolean applyingSettings;
+    private final android.os.Handler autoSaveHandler =
+            new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable autoSaveTask = new Runnable() {
+        @Override
+        public void run() {
+            saveSettings();
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -111,6 +122,16 @@ public class MainActivity extends Activity {
         if (!new Prefs(this).onboarded()) {
             startActivity(new Intent(this, OnboardingActivity.class));
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        // 退出前把没落盘的输入写进去,并取消挂起的自动保存
+        autoSaveHandler.removeCallbacks(autoSaveTask);
+        if (current == PG_SETTINGS && !applyingSettings) {
+            saveSettings();
+        }
+        super.onDestroy();
     }
 
     /** 手动打开首次使用引导(首页入口)。 */
@@ -221,6 +242,10 @@ public class MainActivity extends Activity {
     }
 
     private void showPage(int pg) {
+        // 离开设置页前先把没落盘的输入写进去,否则切页回来会被存档值覆盖
+        if (current == PG_SETTINGS && pg != PG_SETTINGS) {
+            flushAutoSave();
+        }
         current = pg;
         for (int i = 0; i < pages.length; i++) {
             pages[i].setVisibility(i == pg ? View.VISIBLE : View.GONE);
@@ -675,6 +700,7 @@ public class MainActivity extends Activity {
 
         LinearLayout cardGen = card();
         cardGen.addView(Ui.section(this, "通用"));
+        // 勾选/取消立即生效:以前只在按"保存设置"时写盘,切页回来又被覆盖
         sAutoUpdate = new CheckBox(this);
         sAutoUpdate.setText("自动检查更新(每天一次,可忽略某个版本)");
         sAutoUpdate.setTextSize(13);
@@ -699,6 +725,33 @@ public class MainActivity extends Activity {
         sJitter = Ui.input(this, "0-" + Scheduler.MAX_JITTER_MIN);
         sJitter.setInputType(InputType.TYPE_CLASS_NUMBER);
         cardT.addView(sJitter, Ui.match());
+        tvSettingsHint = Ui.label(this, "改完自动保存并立即生效,不用再点下面的按钮");
+        tvSettingsHint.setPadding(0, Ui.dp(this, 6), 0, 0);
+        cardT.addView(tvSettingsHint);
+        // 输入即存(700ms 防抖):否则用户填完没点"保存设置"就切页,
+        // 回来会被存档值覆盖 —— 看起来就像"改了没用"
+        sJitter.addTextChangedListener(new android.text.TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int a, int b, int c) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int a, int b, int c) {
+            }
+
+            @Override
+            public void afterTextChanged(android.text.Editable s) {
+                scheduleAutoSave();
+            }
+        });
+        sJitter.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+            @Override
+            public void onFocusChange(View v, boolean hasFocus) {
+                if (!hasFocus) {
+                    flushAutoSave();
+                }
+            }
+        });
         root.addView(cardT);
         root.addView(Ui.spacer(this, 12));
 
@@ -732,6 +785,20 @@ public class MainActivity extends Activity {
         sPin = Ui.input(this, "锁屏 PIN 码(仅勾选 Root 解锁时使用)");
         sPin.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         cardR.addView(sPin, lpFull());
+        sPin.addTextChangedListener(new android.text.TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int a, int b, int c) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int a, int b, int c) {
+            }
+
+            @Override
+            public void afterTextChanged(android.text.Editable s) {
+                scheduleAutoSave();
+            }
+        });
         root.addView(Ui.spacer(this, 8));
         Button btnRootCheck = Ui.secondary(this, "检测 Root 可用性");
         btnRootCheck.setOnClickListener(new View.OnClickListener() {
@@ -774,11 +841,28 @@ public class MainActivity extends Activity {
         root.addView(cardR);
         root.addView(Ui.spacer(this, 12));
 
+        // 所有开关都改成"改完立即生效"
+        android.widget.CompoundButton.OnCheckedChangeListener auto =
+                new android.widget.CompoundButton.OnCheckedChangeListener() {
+                    @Override
+                    public void onCheckedChanged(android.widget.CompoundButton b, boolean checked) {
+                        scheduleAutoSave();
+                    }
+                };
+        sAutoUpdate.setOnCheckedChangeListener(auto);
+        sLock.setOnCheckedChangeListener(auto);
+        sLockAfter.setOnCheckedChangeListener(auto);
+        sKeepAlive.setOnCheckedChangeListener(auto);
+        sDim.setOnCheckedChangeListener(auto);
+        sRoot.setOnCheckedChangeListener(auto);
+
         Button btnSave = Ui.primary(this, "保存设置");
         btnSave.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                autoSaveHandler.removeCallbacks(autoSaveTask);
                 saveSettings();
+                echoClampedJitter();
                 Toast.makeText(MainActivity.this, "设置已保存 ✓", Toast.LENGTH_SHORT).show();
             }
         });
@@ -1282,6 +1366,40 @@ public class MainActivity extends Activity {
         return true;
     }
 
+    /** 输入停顿 700ms 后写盘(避免每敲一个数字就重排一次闹钟)。 */
+    private void scheduleAutoSave() {
+        if (applyingSettings) {
+            return;
+        }
+        autoSaveHandler.removeCallbacks(autoSaveTask);
+        autoSaveHandler.postDelayed(autoSaveTask, 700);
+    }
+
+    /** 立即写盘(失焦、离开页面时调用),并把夹取后的实际值回显到输入框。 */
+    private void flushAutoSave() {
+        autoSaveHandler.removeCallbacks(autoSaveTask);
+        if (applyingSettings) {
+            return;
+        }
+        saveSettings();
+        echoClampedJitter();
+    }
+
+    /** 输入 35 这类超范围的值会被夹到 30:把真正生效的数字写回输入框,避免显示与存储不一致。 */
+    private void echoClampedJitter() {
+        if (sJitter == null) {
+            return;
+        }
+        String shown = sJitter.getText().toString().trim();
+        String real = String.valueOf(new Prefs(this).jitterMin());
+        if (!shown.equals(real)) {
+            applyingSettings = true;
+            sJitter.setText(real);
+            sJitter.setSelection(real.length());
+            applyingSettings = false;
+        }
+    }
+
     private void saveSettings() {
         Prefs p = new Prefs(this);
         p.setAutoCheckUpdate(sAutoUpdate.isChecked());
@@ -1291,7 +1409,11 @@ public class MainActivity extends Activity {
         p.setDimScreen(sDim.isChecked());
         p.setRootUnlock(sRoot.isChecked());
         p.setRootPin(sPin.getText().toString().trim());
-        p.setJitterMin(parseJitter(sJitter, 10));
+        // 抖动框可能是空的(用户正在重新输入):这时保留原值,不要当成默认值写进去,
+        // 否则自动保存会在你删掉旧数字的瞬间把 10 写回去
+        if (!sJitter.getText().toString().trim().isEmpty()) {
+            p.setJitterMin(parseJitter(sJitter, p.jitterMin()));
+        }
         // 常驻保活以前只存不生效:取消勾选后前台服务会一直活着(通知栏一直挂着),
         // 勾选后又要等下次启动才生效
         if (sKeepAlive.isChecked()) {
@@ -1309,6 +1431,7 @@ public class MainActivity extends Activity {
 
     private void refreshSettings() {
         Prefs p = new Prefs(this);
+        applyingSettings = true; // 回填期间不触发自动保存
         sAutoUpdate.setChecked(p.autoCheckUpdate());
         sLock.setChecked(p.handleLockscreen());
         sLockAfter.setChecked(p.lockAfterDone());
@@ -1317,6 +1440,7 @@ public class MainActivity extends Activity {
         sRoot.setChecked(p.rootUnlock());
         sPin.setText(p.rootPin());
         sJitter.setText(String.valueOf(p.jitterMin()));
+        applyingSettings = false;
     }
 
     private void syncInputs() {

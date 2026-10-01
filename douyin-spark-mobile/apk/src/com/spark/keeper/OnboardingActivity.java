@@ -186,13 +186,28 @@ public class OnboardingActivity extends Activity {
             if (which == PermissionGuide.P_WRITE_SETTINGS) {
                 desc = desc + (new Prefs(this).dimScreen() ? "" : "(当前未启用静默亮度,可跳过)");
             }
+            // 没完成的关键项直接把"手动路径"写在下面:自动跳转失败(尤其国产 ROM 改版)时,
+            // 用户照着点也能到,不会卡在"点了没反应"
+            if (!ok && (which == PermissionGuide.P_AUTOSTART || which == PermissionGuide.P_BATTERY
+                    || which == PermissionGuide.P_A11Y || which == PermissionGuide.P_OVERLAY)) {
+                String path = PermissionGuide.manualPath(which);
+                if (!path.isEmpty()) {
+                    desc = desc + "\n" + path;
+                }
+            }
             LinearLayout item = Ui.listItem(this, icon, PermissionGuide.title(which), desc,
                     chipText, chipBg, chipFg, new View.OnClickListener() {
                         @Override
                         public void onClick(View v) {
-                            if (!PermissionGuide.open(OnboardingActivity.this, which)) {
+                            boolean opened = PermissionGuide.open(OnboardingActivity.this, which);
+                            String path = PermissionGuide.manualPath(which);
+                            if (!opened) {
                                 Toast.makeText(OnboardingActivity.this,
-                                        "没找到对应设置页,请到「设置 → 应用 → 续火花」里手动开启",
+                                        "这台机器没有找到对应设置页。\n" + path, Toast.LENGTH_LONG).show();
+                            } else if (PermissionGuide.lastOpened().contains("APPLICATION_DETAILS_SETTINGS")) {
+                                // 只跳到了应用详情页:说明该机型没有专属入口,提示手动路径
+                                Toast.makeText(OnboardingActivity.this,
+                                        "已打开应用详情页(没有找到专属设置页)。\n" + path,
                                         Toast.LENGTH_LONG).show();
                             }
                         }

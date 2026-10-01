@@ -25,6 +25,15 @@ public class RunnerService extends Service {
     private final AtomicInteger pending = new AtomicInteger(0);
     /** 保护 pending/lastStartId 的"收尾判定":新任务不能在判定之后插进来又被顺手停掉。 */
     private static final Object DONE_LOCK = new Object();
+
+    /** 协议模式的返回内容是否代表"这一轮基本没成",值得用无障碍模式兜底。 */
+    private static boolean protoFailed(String summary) {
+        if (summary == null) {
+            return true;
+        }
+        return summary.contains("未登录") || summary.contains("超时") || summary.contains("异常")
+                || summary.contains("初始化失败") || summary.contains("页面异常");
+    }
     private int lastStartId = -1;
 
     @Override
@@ -55,6 +64,14 @@ public class RunnerService extends Service {
                     if (pr.protocolMode()) {
                         // 实验性协议模式:离屏 WebView 后台直发(不依赖无障碍)
                         String summary = ProtocolService.runOnceStandalone(RunnerService.this, pr);
+                        // 协议模式失败(网页打不开/未登录/结构改版)时,如果无障碍服务是开着的,
+                        // 就用无障碍模式兜底再跑一轮 —— 否则这一天就白过了(真机 09-27 就是这样)
+                        if (protoFailed(summary) && SparkService.INSTANCE != null) {
+                            Prefs.appendLog(RunnerService.this,
+                                    "协议模式未成功(" + summary + "),改用无障碍模式兜底");
+                            String fallback = SparkService.INSTANCE.runOnce();
+                            summary = summary + "\n→ 已用无障碍模式兜底:" + fallback;
+                        }
                         notifyResult(RunnerService.this, "续火花运行结果(协议模式)", summary);
                     } else if (s == null) {
                         String msg = "无障碍服务未开启,请打开「续火花」App → 开启无障碍服务";

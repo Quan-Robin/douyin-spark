@@ -600,6 +600,13 @@ public class SparkService extends AccessibilityService {
     // ================================================================ 导航与发送
     private boolean launchDouyin() {
         Intent i = getPackageManager().getLaunchIntentForPackage(DOUYIN_PKG);
+        // 开机后或系统繁忙时偶发查不到(真机日志 09-27 14:59 出现过"未安装抖音"),
+        // 等两秒重查两次,不要因为一次瞬时失败就放弃当天的续火
+        for (int retry = 0; i == null && retry < 2 && !ABORT; retry++) {
+            log("暂时查不到抖音的启动入口,2 秒后重试 (" + (retry + 1) + "/2)");
+            sleep(2000);
+            i = getPackageManager().getLaunchIntentForPackage(DOUYIN_PKG);
+        }
         if (i == null) {
             log("未安装抖音 (" + DOUYIN_PKG + ")");
             return false;
@@ -790,7 +797,14 @@ public class SparkService extends AccessibilityService {
         return false;
     }
 
-    /** 聊天页顶部区域内最靠上、最靠左的短文本(用于核对昵称);读不到返回 null。 */
+    /**
+     * 聊天页顶部区域内最靠上、最靠左的短文本(用于核对昵称);读不到返回 null。
+     *
+     * 关键:必须排除【消息列表】里的文本。真机日志(09-27~09-29)显示顶部 15% 里经常是聊天记录内容
+     * —— 时间戳「00:02」「周日 12:36」、上一条消息「快去上学！」「晚安」,于是被误判成"进错了会话",
+     * 结果是好友整天收不到消息(为了"不发错人"反而误伤)。消息行都在可滚动容器里,标题栏不在,
+     * 用 isScrollable 祖先即可区分。
+     */
     private String firstTopText(final int topZone) {
         List<AccessibilityNodeInfo> hits = findNodes(new NodeTest() {
             @Override
@@ -798,10 +812,16 @@ public class SparkService extends AccessibilityService {
                 if (!visible(n) || bounds(n).top >= topZone) {
                     return false;
                 }
+                if (inScrollable(n)) {
+                    return false; // 消息列表里的内容(时间戳/上一条消息)一律不算标题
+                }
                 String t = txt(n);
                 int p = t.indexOf('|');
                 String a = (p >= 0 ? t.substring(0, p) : t).trim();
-                return !a.isEmpty() && a.length() <= 24;
+                if (a.isEmpty() || a.length() > 24) {
+                    return false;
+                }
+                return !looksLikeTimeOrMessage(a);
             }
         });
         if (hits.isEmpty()) {
@@ -818,6 +838,35 @@ public class SparkService extends AccessibilityService {
         String t = txt(best);
         int p = t.indexOf('|');
         return (p >= 0 ? t.substring(0, p) : t).trim();
+    }
+
+    /** 节点是否位于可滚动容器(消息列表)内。 */
+    private static boolean inScrollable(AccessibilityNodeInfo n) {
+        AccessibilityNodeInfo p = n;
+        for (int i = 0; i < 8 && p != null; i++) {
+            try {
+                if (p.isScrollable()) {
+                    return true;
+                }
+            } catch (Exception e) {
+                return false;
+            }
+            try {
+                p = p.getParent();
+            } catch (Exception e) {
+                return false;
+            }
+        }
+        return false;
+    }
+
+    /** 时间戳/日期类文本不是昵称,不能当作"发错人的证据"。 */
+    private static boolean looksLikeTimeOrMessage(String s) {
+        return s.matches("^\\d{1,2}:\\d{2}$")
+                || s.matches("^\\d{2}[-/]\\d{1,2}.*")
+                || s.matches("^\\d{1,2}月\\d{1,2}日.*")
+                || s.matches("^(周|星期)[一二三四五六日天].*")
+                || s.matches("^(今天|昨天|前天|上午|下午|凌晨|晚上).*");
     }
 
     /** 顶部常见的按钮/状态类文字,不能当作"发错人的证据"。 */

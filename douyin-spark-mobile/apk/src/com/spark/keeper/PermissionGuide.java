@@ -17,11 +17,18 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * 首次使用引导用:每一项权限的"是否已授予"判断,以及**按手机厂商**给出可用的跳转。
+ * 引导页用:权限状态判断 + 按厂商跳转。
  *
- * 国产 ROM 把「自启动 / 后台弹出界面 / 电池优化」藏在各自的安全中心里,没有一个通用入口,
- * 所以这里内置了一份候选链:能直接跳到厂商页面的就跳,跳不过去再退回系统设置页,
- * 让用户自己找 —— 至少不会"点了没反应"。
+ * 候选顺序:① 厂商"自启动管理"页(精确组件)→ ② 厂商安全中心主页 → ③ 系统应用详情页。
+ * 精确组件先用 resolveActivity 探测,不存在就跳过(不会点了没反应);全落空时 UI 给出 manualPath 手动路径。
+ *
+ * 组件名出处(已核对多个开源守护/推送项目):
+ *   联想 com.lenovo.security/.purebackground.PureBackgroundActivity(HelloDaemon/XPush/SmsForwarder)
+ *   联想ZUI com.zui.safecenter/com.lenovo.safecenter.MainTab.LeSafeMainActivity
+ *   荣耀 com.hihonor.systemmanager.startupmgr.ui.StartupNormalAppListActivity
+ *   华为 com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity
+ *   中兴 com.zte.heartyservice.autorun.AppAutoRunManager;TCL com.tcl.security.autorun.AutoRunActivity
+ *   魅族 action com.meizu.safe.security.SHOW_APPSEC;OPPO com.coloros.safecenter.permission.startup.StartupAppListActivity
  */
 public class PermissionGuide {
 
@@ -33,6 +40,12 @@ public class PermissionGuide {
     public static final int P_EXACT_ALARM = 5;
     public static final int P_WRITE_SETTINGS = 6;
     public static final int P_COUNT = 7;
+
+    private static volatile String lastOpened = "";
+
+    public static String lastOpened() {
+        return lastOpened;
+    }
 
     public static String title(int which) {
         switch (which) {
@@ -50,9 +63,9 @@ public class PermissionGuide {
     public static String desc(int which) {
         switch (which) {
             case P_A11Y: return "自动操作抖音 App 必须开启。在列表里找到「续火花辅助」并打开。";
-            case P_OVERLAY: return "协议模式要把网页放到屏幕外运行,必须允许本应用显示在其他应用上层;无障碍模式后台拉起抖音也依赖它。";
+            case P_OVERLAY: return "协议模式要把网页放到屏幕外运行,必须允许;无障碍模式后台拉起抖音也依赖它。";
             case P_BATTERY: return "系统休眠后会冻结应用,定时会失效。请设为「不受限制 / 不优化」。";
-            case P_AUTOSTART: return "让 App 能在后台被定时唤醒、重启后自动恢复定时。国产 ROM 必须在这里手动允许,否则定时会被系统清理掉。";
+            case P_AUTOSTART: return "让 App 能在后台被定时唤醒、重启后自动恢复定时。国产 ROM 必须在这里手动允许。";
             case P_NOTIFY: return "运行结果和异常会通过通知告诉你(Android 13+ 需要授权)。";
             case P_EXACT_ALARM: return "Android 12+ 需要允许,否则定时会被系统延后到不准确的时间。";
             case P_WRITE_SETTINGS: return "只有勾选「静默亮度」时才需要;不勾选可以跳过。";
@@ -60,13 +73,56 @@ public class PermissionGuide {
         }
     }
 
-    /** 该项是否已满足。自启动/后台弹出无法查询,由用户点「我已设置好」确认。 */
+    /** 按机型的手动路径:自动跳转落空时照着点也能到。 */
+    public static String manualPath(int which) {
+        String b = brand();
+        if (which == P_AUTOSTART) {
+            if (b.contains("xiaomi") || b.contains("redmi") || b.contains("poco")) {
+                return "手动路径:设置 → 应用设置 → 应用管理 → 续火花 → 自启动;再把「省电策略」设为无限制,有「后台弹出界面」也允许。";
+            }
+            if (b.contains("huawei") || b.contains("honor") || b.contains("hihonor")) {
+                return "手动路径:设置 → 应用 → 应用启动管理 → 续火花 → 关闭「自动管理」,勾选允许自启动/允许后台活动。";
+            }
+            if (b.contains("oppo") || b.contains("realme") || b.contains("oneplus") || b.contains("oplus")) {
+                return "手动路径:设置 → 应用管理 → 续火花 → 允许「自启动」「关联启动」「后台运行」;再到 电池 → 耗电保护 里允许后台运行。";
+            }
+            if (b.contains("vivo") || b.contains("iqoo")) {
+                return "手动路径:设置 → 更多设置 → 权限管理 → 自启动 → 允许续火花;再到 电池 → 后台高耗电 允许。";
+            }
+            if (b.contains("samsung")) {
+                return "手动路径:设置 → 电池和设备维护 → 电池 → 后台使用限制 → 把续火花从「休眠应用」里移除。";
+            }
+            if (b.contains("meizu")) {
+                return "手动路径:设置 → 应用管理 → 续火花 → 权限 → 允许自启动、后台运行。";
+            }
+            if (b.contains("lenovo") || b.contains("zui") || b.contains("motorola") || b.contains("moto")) {
+                return "手动路径:打开「乐安全 / 安全中心」→ 自启动管理 → 允许续火花;或 设置 → 应用管理 → 续火花 → 权限 → 允许自启动、后台运行。";
+            }
+            if (b.contains("zte") || b.contains("nubia") || b.contains("redmagic")) {
+                return "手动路径:设置 → 应用管理 → 续火花 → 自启动/后台运行 → 允许。";
+            }
+            if (b.contains("tcl") || b.contains("alcatel")) {
+                return "手动路径:设置 → 应用管理 → 续火花 → 自启动 → 允许。";
+            }
+            return "手动路径:设置 → 应用 → 续火花 → 电池/后台管理 → 设为不限制,并允许自启动。";
+        }
+        if (which == P_BATTERY) {
+            return "手动路径:设置 → 电池(或 应用 → 续火花 → 电池)→ 选择「不受限制 / 不优化」。";
+        }
+        if (which == P_OVERLAY) {
+            return "手动路径:设置 → 应用 → 特殊应用权限 → 显示在其他应用上层 → 允许续火花。";
+        }
+        if (which == P_A11Y) {
+            return "手动路径:设置 → 无障碍(或 更多设置 → 无障碍)→ 已下载的服务 → 续火花辅助 → 开启。";
+        }
+        return "";
+    }
+
     public static boolean isGranted(Context c, int which) {
         try {
             switch (which) {
                 case P_A11Y: return isAccessibilityEnabled(c);
-                case P_OVERLAY:
-                    return Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(c);
+                case P_OVERLAY: return Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(c);
                 case P_BATTERY: return isIgnoringBattery(c);
                 case P_AUTOSTART: return Prefs.isSelfStartConfirmed(c);
                 case P_NOTIFY:
@@ -88,7 +144,6 @@ public class PermissionGuide {
         }
     }
 
-    /** 无障碍是否已开启:先查系统列表,再用服务实例兜底。 */
     public static boolean isAccessibilityEnabled(Context c) {
         try {
             String enabled = Settings.Secure.getString(c.getContentResolver(),
@@ -121,7 +176,6 @@ public class PermissionGuide {
         }
     }
 
-    /** 厂商标识(小写),用于挑跳转链。 */
     public static String brand() {
         String s = (Build.MANUFACTURER == null ? "" : Build.MANUFACTURER)
                 + " " + (Build.BRAND == null ? "" : Build.BRAND);
@@ -136,20 +190,21 @@ public class PermissionGuide {
         return m;
     }
 
-    /** 该厂商是否有专属的自启动管理页(用于给用户提示)。 */
     public static boolean hasBrandAutostartPage() {
         String b = brand();
-        return b.contains("xiaomi") || b.contains("redmi") || b.contains("huawei") || b.contains("honor")
-                || b.contains("oppo") || b.contains("realme") || b.contains("oneplus") || b.contains("vivo")
-                || b.contains("iqoo") || b.contains("samsung") || b.contains("meizu") || b.contains("asus")
-                || b.contains("letv") || b.contains("lenovo") || b.contains("zte") || b.contains("nubia");
+        String[] keys = {"xiaomi", "redmi", "poco", "huawei", "honor", "hihonor", "oppo", "realme",
+                "oneplus", "oplus", "vivo", "iqoo", "samsung", "meizu", "lenovo", "zui", "motorola",
+                "moto", "zte", "nubia", "redmagic", "tcl", "alcatel", "asus", "letv", "smartisan"};
+        for (String k : keys) {
+            if (b.contains(k)) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    /**
-     * 打开该项对应的设置页。返回是否成功启动了某个页面(全部失败时返回 false)。
-     */
     public static boolean open(Context c, int which) {
-        List<Intent> list = new ArrayList<>();
+        List<Intent> list = new ArrayList<Intent>();
         String pkg = c.getPackageName();
         switch (which) {
             case P_A11Y:
@@ -166,42 +221,65 @@ public class PermissionGuide {
                     list.add(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
                             Uri.parse("package:" + pkg)));
                 }
-                addByBrand(list, "com.miui.powerkeeper", "com.miui.powerkeeper.ui.HiddenAppsConfigActivity",
-                        "package_name", pkg);
-                addByBrand(list, "com.huawei.systemmanager",
+                add(list, "com.miui.powerkeeper", "com.miui.powerkeeper.ui.HiddenAppsConfigActivity");
+                add(list, "com.huawei.systemmanager",
                         "com.huawei.systemmanager.optimize.process.ProtectActivity");
-                addByBrand(list, "com.coloros.safecenter",
+                add(list, "com.hihonor.systemmanager",
+                        "com.hihonor.systemmanager.optimize.process.ProtectActivity");
+                add(list, "com.coloros.safecenter",
                         "com.coloros.safecenter.permission.startup.StartupAppListActivity");
-                addByBrand(list, "com.vivo.permissionmanager",
+                add(list, "com.oplus.battery", "com.oplus.battery.ui.app_manage.AppPowerManagerActivity");
+                add(list, "com.vivo.permissionmanager",
                         "com.vivo.permissionmanager.activity.BgStartUpManagerActivity");
-                addByBrand(list, "com.samsung.android.lool", "com.samsung.android.sm.ui.battery.BatteryActivity");
+                add(list, "com.samsung.android.lool", "com.samsung.android.sm.ui.battery.BatteryActivity");
+                add(list, "com.lenovo.security", "com.lenovo.security.purebackground.PureBackgroundActivity");
                 list.add(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
                 break;
             case P_AUTOSTART:
-                addByBrand(list, "com.miui.securitycenter",
+                add(list, "com.miui.securitycenter",
                         "com.miui.permcenter.autostart.AutoStartManagementActivity");
-                addByBrand(list, "com.huawei.systemmanager",
+                addPkgMain(c, list, "com.miui.securitycenter");
+                add(list, "com.huawei.systemmanager",
                         "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity");
-                addByBrand(list, "com.huawei.systemmanager",
+                add(list, "com.huawei.systemmanager",
                         "com.huawei.systemmanager.appcontrol.activity.StartupAppControlActivity");
-                addByBrand(list, "com.coloros.safecenter",
+                add(list, "com.hihonor.systemmanager",
+                        "com.hihonor.systemmanager.startupmgr.ui.StartupNormalAppListActivity");
+                addPkgMain(c, list, "com.huawei.systemmanager");
+                addPkgMain(c, list, "com.hihonor.systemmanager");
+                add(list, "com.coloros.safecenter",
                         "com.coloros.safecenter.permission.startup.StartupAppListActivity");
-                addByBrand(list, "com.oppo.safe", "com.oppo.safe.permission.startup.StartupAppListActivity");
-                addByBrand(list, "com.coloros.oppoguardelf",
+                add(list, "com.oppo.safe", "com.oppo.safe.permission.startup.StartupAppListActivity");
+                add(list, "com.coloros.oppoguardelf",
                         "com.coloros.powermanager.fuelgaue.PowerUsageModelActivity");
-                addByBrand(list, "com.vivo.permissionmanager",
-                        "com.vivo.permissionmanager.activity.BgStartUpManagerActivity");
-                addByBrand(list, "com.iqoo.secure",
-                        "com.iqoo.secure.ui.phoneoptimize.AddWhiteListActivity");
-                addByBrand(list, "com.samsung.android.lool",
-                        "com.samsung.android.sm.ui.battery.BatteryActivity");
-                addByBrand(list, "com.meizu.safe", "com.meizu.safe.permission.SmartBGActivity");
-                addByBrand(list, "com.oneplus.security",
+                add(list, "com.oneplus.security",
                         "com.oneplus.security.chainlaunch.view.ChainLaunchAppListActivity");
-                addByBrand(list, "com.asus.mobilemanager", "com.asus.mobilemanager.MainActivity");
-                addByBrand(list, "com.letv.android.letvsafe", "com.letv.android.letvsafe.AutobootManageActivity");
-                // 兜底:应用详情页(几乎所有 ROM 都有,里面通常能看到"电池/后台"入口)
-                list.add(appDetails(pkg));
+                addPkgMain(c, list, "com.coloros.safecenter");
+                addPkgMain(c, list, "com.oplus.battery");
+                add(list, "com.vivo.permissionmanager",
+                        "com.vivo.permissionmanager.activity.BgStartUpManagerActivity");
+                add(list, "com.iqoo.secure", "com.iqoo.secure.ui.phoneoptimize.AddWhiteListActivity");
+                addPkgMain(c, list, "com.vivo.permissionmanager");
+                add(list, "com.samsung.android.lool",
+                        "com.samsung.android.sm.ui.battery.BatteryActivity");
+                add(list, "com.samsung.android.sm", "com.samsung.android.sm.ui.BatteryActivity");
+                Intent meizu = new Intent("com.meizu.safe.security.SHOW_APPSEC");
+                meizu.putExtra("packageName", pkg);
+                meizu.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                list.add(meizu);
+                add(list, "com.meizu.safe", "com.meizu.safe.security.AppSecActivity");
+                add(list, "com.lenovo.security", "com.lenovo.security.purebackground.PureBackgroundActivity");
+                add(list, "com.zui.safecenter", "com.lenovo.safecenter.MainTab.LeSafeMainActivity");
+                addPkgMain(c, list, "com.lenovo.security");
+                addPkgMain(c, list, "com.zui.safecenter");
+                addPkgMain(c, list, "com.lenovo.safecenter");
+                add(list, "com.zte.heartyservice", "com.zte.heartyservice.autorun.AppAutoRunManager");
+                addPkgMain(c, list, "com.zte.heartyservice");
+                add(list, "com.tcl.security", "com.tcl.security.autorun.AutoRunActivity");
+                add(list, "com.tcl.security", "com.tcl.security.MainActivity");
+                add(list, "com.asus.mobilemanager", "com.asus.mobilemanager.MainActivity");
+                add(list, "com.letv.android.letvsafe", "com.letv.android.letvsafe.AutobootManageActivity");
+                add(list, "com.smartisanos.security", "com.smartisanos.security.MainActivity");
                 break;
             case P_NOTIFY:
                 if (Build.VERSION.SDK_INT >= 26) {
@@ -209,34 +287,46 @@ public class PermissionGuide {
                     n.putExtra(Settings.EXTRA_APP_PACKAGE, pkg);
                     list.add(n);
                 }
-                list.add(appDetails(pkg));
                 break;
             case P_EXACT_ALARM:
                 if (Build.VERSION.SDK_INT >= 31) {
                     list.add(new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:" + pkg)));
                 }
-                list.add(appDetails(pkg));
                 break;
             case P_WRITE_SETTINGS:
                 if (Build.VERSION.SDK_INT >= 23) {
                     list.add(new Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:" + pkg)));
                 }
-                list.add(appDetails(pkg));
                 break;
             default:
                 break;
         }
         list.add(appDetails(pkg));
+        PackageManager pm = c.getPackageManager();
         for (Intent i : list) {
             try {
+                if (i.getComponent() != null && pm.resolveActivity(i, 0) == null) {
+                    continue;
+                }
                 i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 c.startActivity(i);
+                lastOpened = describe(i);
                 return true;
             } catch (Exception ignored) {
-                // 该入口在这台机器上不存在,继续试下一个
             }
         }
+        lastOpened = "";
         return false;
+    }
+
+    private static String describe(Intent i) {
+        if (i.getComponent() != null) {
+            return i.getComponent().getPackageName() + "/" + i.getComponent().getClassName();
+        }
+        if (i.getAction() != null) {
+            return i.getAction();
+        }
+        return "unknown";
     }
 
     private static Intent appDetails(String pkg) {
@@ -245,17 +335,21 @@ public class PermissionGuide {
         return i;
     }
 
-    private static void addByBrand(List<Intent> list, String pkg, String cls) {
-        addByBrand(list, pkg, cls, null, null);
+    private static void addPkgMain(Context c, List<Intent> list, String pkg) {
+        try {
+            Intent i = c.getPackageManager().getLaunchIntentForPackage(pkg);
+            if (i != null) {
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                list.add(i);
+            }
+        } catch (Exception ignored) {
+        }
     }
 
-    private static void addByBrand(List<Intent> list, String pkg, String cls, String extraKey, String extraValue) {
+    private static void add(List<Intent> list, String pkg, String cls) {
         try {
             Intent i = new Intent();
             i.setComponent(new ComponentName(pkg, cls));
-            if (extraKey != null) {
-                i.putExtra(extraKey, extraValue);
-            }
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             list.add(i);
         } catch (Exception ignored) {

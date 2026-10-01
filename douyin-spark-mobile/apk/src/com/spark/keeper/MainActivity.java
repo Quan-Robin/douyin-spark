@@ -65,14 +65,17 @@ public class MainActivity extends Activity {
     /** 无障碍/协议页的输入框是否已从配置回填(避免每次切页把未保存的输入冲掉)。 */
     private boolean inputsSynced;
 
-    private EditText aFriends, aMsgs, aTime, aJitter;
+    private EditText aFriends, aMsgs, aTime;
+    private TextView aJitterInfo;
     private CheckBox aTest;
-    private EditText pFriends, pMsgs, pTime, pJitter;
+    private EditText pFriends, pMsgs, pTime;
+    private TextView pJitterInfo;
     private CheckBox pTest;
     private CheckBox sAutoUpdate, sLock, sLockAfter, sKeepAlive, sDim, sRoot;
     private EditText sJitter;
     private TimeRowsEditor timeEditor;
     private EditText sPin;
+    private TextView tvRootStatus;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -241,12 +244,14 @@ public class MainActivity extends Activity {
                 syncInputs();
                 inputsSynced = true;
             }
+            refreshJitterInfo();
             refreshA11yStatus();
         } else if (pg == PG_PROTO) {
             if (!inputsSynced) {
                 syncInputs();
                 inputsSynced = true;
             }
+            refreshJitterInfo();
             refreshProtoStatus();
         } else if (pg == PG_SETTINGS) {
             refreshSettings();
@@ -299,18 +304,6 @@ public class MainActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
     }
 
-    private LinearLayout.LayoutParams lpHalf() {
-        return new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-    }
-
-    private LinearLayout.LayoutParams lpHalfRight() {
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        lp.leftMargin = Ui.dp(this, 12);
-        return lp;
-    }
-
     private LinearLayout.LayoutParams lpFull() {
         return new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -327,19 +320,28 @@ public class MainActivity extends Activity {
         return t;
     }
 
-    private LinearLayout timeRow(EditText time, EditText jitter) {
-        LinearLayout row = hRow();
-        LinearLayout c1 = new LinearLayout(this);
-        c1.setOrientation(LinearLayout.VERTICAL);
-        c1.addView(Ui.section(this, "每天发送时间"));
-        c1.addView(time, lpW());
-        LinearLayout c2 = new LinearLayout(this);
-        c2.setOrientation(LinearLayout.VERTICAL);
-        c2.addView(Ui.section(this, "随机抖动(分钟,0-" + Scheduler.MAX_JITTER_MIN + ")"));
-        c2.addView(jitter, lpW());
-        row.addView(c1, lpHalf());
-        row.addView(c2, lpHalfRight());
-        return row;
+    /**
+     * 发送时间一行(随机抖动已统一到「基本设置」,这里不再重复放输入框)。
+     * 之前两个模式页各自带一个抖动输入框,但它们只在首次进入时回填,
+     * 于是"在基本设置里改好的抖动"会被模式页保存时的过期值覆盖回去。
+     */
+    private LinearLayout timeRow(EditText time) {
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
+        col.addView(Ui.section(this, "每天发送时间"));
+        col.addView(time, lpFull());
+        return col;
+    }
+
+    /** 抖动的当前值(只读提示;修改入口统一在「基本设置」)。 */
+    private void refreshJitterInfo() {
+        String s = "随机抖动:±" + new Prefs(this).jitterMin() + " 分钟 · 在「基本设置」里修改";
+        if (aJitterInfo != null) {
+            aJitterInfo.setText(s);
+        }
+        if (pJitterInfo != null) {
+            pJitterInfo.setText(s);
+        }
     }
 
     // ================================================================ 首页
@@ -526,9 +528,9 @@ public class MainActivity extends Activity {
         aMsgs.setGravity(Gravity.TOP);
         cfgCard.addView(aMsgs, lpFull());
         aTime = Ui.input(this, "21:30");
-        aJitter = Ui.input(this, "随机抖动(0-" + Scheduler.MAX_JITTER_MIN + ")");
-        aJitter.setInputType(InputType.TYPE_CLASS_NUMBER);
-        cfgCard.addView(timeRow(aTime, aJitter));
+        cfgCard.addView(timeRow(aTime));
+        aJitterInfo = Ui.label(this, "");
+        cfgCard.addView(aJitterInfo);
         root.addView(cfgCard);
         root.addView(Ui.spacer(this, 12));
 
@@ -623,9 +625,9 @@ public class MainActivity extends Activity {
         pMsgs.setGravity(Gravity.TOP);
         cfgCard.addView(pMsgs, lpFull());
         pTime = Ui.input(this, "21:30");
-        pJitter = Ui.input(this, "随机抖动(0-" + Scheduler.MAX_JITTER_MIN + ")");
-        pJitter.setInputType(InputType.TYPE_CLASS_NUMBER);
-        cfgCard.addView(timeRow(pTime, pJitter));
+        cfgCard.addView(timeRow(pTime));
+        pJitterInfo = Ui.label(this, "");
+        cfgCard.addView(pJitterInfo);
         root.addView(cfgCard);
         root.addView(Ui.spacer(this, 12));
 
@@ -735,32 +737,14 @@ public class MainActivity extends Activity {
         btnRootCheck.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        String r;
-                        try {
-                            Process pr = Runtime.getRuntime().exec(new String[]{"su", "-c", "id"});
-                            BufferedReader br = new BufferedReader(new InputStreamReader(pr.getInputStream()));
-                            String line = br.readLine();
-                            pr.waitFor();
-                            r = (line != null && line.contains("uid=0"))
-                                    ? "✅ Root 可用" : "❌ su 未授权或无 root";
-                        } catch (Exception e) {
-                            r = "❌ 无法执行 su: " + e.getMessage();
-                        }
-                        final String rr = r;
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                Toast.makeText(MainActivity.this, rr, Toast.LENGTH_LONG).show();
-                            }
-                        });
-                    }
-                }).start();
+                checkRoot();
             }
         });
         cardR.addView(btnRootCheck, lpFull());
+        // 结果常驻显示:以前只弹 Toast,超时或没反应时用户什么都看不到
+        tvRootStatus = Ui.label(this, "尚未检测(不影响不使用 Root 的用户)");
+        tvRootStatus.setPadding(0, Ui.dp(this, 8), 0, 0);
+        cardR.addView(tvRootStatus);
         root.addView(Ui.spacer(this, 8));
         Button btnUnlock = Ui.secondary(this, "测试 Root 解锁(会立即锁屏并自动解锁)");
         btnUnlock.setOnClickListener(new View.OnClickListener() {
@@ -801,6 +785,142 @@ public class MainActivity extends Activity {
         root.addView(btnSave, lpFull());
         root.addView(Ui.spacer(this, 20));
         return sc;
+    }
+
+    // ================================================================ Root 检测
+
+    /**
+     * 检测 Root 可用性。
+     *
+     * 旧实现有两个致命问题,导致"点了完全没有提示":
+     *   ① 没有超时 —— Magisk 弹出授权框时 su 会一直挂着,waitFor() 永久阻塞;
+     *   ② 没有排空 stderr —— su 的提示写满管道同样会卡死。
+     * 现在先给"正在检测"的即时反馈,再带超时执行,并按情况分别给结论。
+     */
+    private void checkRoot() {
+        if (tvRootStatus != null) {
+            tvRootStatus.setText("正在检测…(若弹出 Root 授权框,请点「允许」)");
+        }
+        Toast.makeText(this, "正在请求 Root 权限(最长等 15 秒)…", Toast.LENGTH_SHORT).show();
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                final String result = probeRoot();
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (tvRootStatus != null) {
+                            tvRootStatus.setText(result);
+                        }
+                        Toast.makeText(MainActivity.this, result, Toast.LENGTH_LONG).show();
+                    }
+                });
+            }
+        }).start();
+    }
+
+    /** 分层检测:找不到 su / 超时未响应 / 已授权 / 有 su 但被拒。任何情况都有明确文案。 */
+    private static String probeRoot() {
+        boolean hasSuFile = false;
+        String[] paths = {"/system/bin/su", "/system/xbin/su", "/sbin/su", "/su/bin/su",
+                "/magisk/.core/bin/su", "/debug_ramdisk/su"};
+        for (String p : paths) {
+            try {
+                if (new java.io.File(p).exists()) {
+                    hasSuFile = true;
+                    break;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        Object[] which = runCmd(new String[]{"sh", "-c", "which su || command -v su"}, 4000);
+        String whichOut = String.valueOf(which[0]).trim();
+        if (!hasSuFile && whichOut.isEmpty()) {
+            return "❌ 未找到 su 命令:设备没有 Root,或 Root 管理工具未安装。\n"
+                    + "不使用 Root 解锁的用户可以忽略这一项。";
+        }
+        Object[] r = runCmd(new String[]{"su", "-c", "id"}, 15000);
+        String out = String.valueOf(r[0]).trim();
+        boolean timedOut = Boolean.TRUE.equals(r[1]);
+        String execErr = String.valueOf(r[2]);
+        if (!execErr.isEmpty() && out.isEmpty()) {
+            return "❌ 无法执行 su:" + execErr + "\n(已找到 su 文件,但当前应用无权执行)";
+        }
+        if (timedOut) {
+            return "❌ 超时:Root 授权请求没有得到响应。\n"
+                    + "请打开 Magisk / Root 管理,把本应用的授权改为「允许」后重新检测。";
+        }
+        if (out.contains("uid=0")) {
+            return "✅ Root 可用:" + out.replace('\n', ' ');
+        }
+        return "❌ su 存在但没有拿到 root 权限"
+                + (out.isEmpty() ? "(没有任何输出,通常是授权被拒绝)" : ":\n" + out);
+    }
+
+    /**
+     * 执行命令并等待结束。
+     * 返回长度 3 的数组:{stdout+stderr 文本, 是否超时, 启动异常信息(无则空串)}。
+     * 超时会 destroy 进程,保证调用方一定能拿到结果、不会永久阻塞。
+     */
+    private static Object[] runCmd(String[] cmd, long timeoutMs) {
+        final StringBuilder sb = new StringBuilder();
+        final boolean[] timedOut = {false};
+        Process pr;
+        try {
+            pr = Runtime.getRuntime().exec(cmd);
+        } catch (Exception e) {
+            return new Object[]{"", false, String.valueOf(e.getMessage())};
+        }
+        final Process fp = pr;
+        Thread d1 = drainTo(pr.getInputStream(), sb);
+        Thread d2 = drainTo(pr.getErrorStream(), sb);
+        Thread killer = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    Thread.sleep(timeoutMs);
+                    timedOut[0] = true;
+                    fp.destroy();
+                } catch (InterruptedException ignored) {
+                }
+            }
+        });
+        killer.setDaemon(true);
+        killer.start();
+        try {
+            pr.waitFor();
+        } catch (InterruptedException ignored) {
+        }
+        killer.interrupt();
+        try {
+            d1.join(300);
+            d2.join(300);
+        } catch (InterruptedException ignored) {
+        }
+        synchronized (sb) {
+            return new Object[]{sb.toString(), timedOut[0], ""};
+        }
+    }
+
+    private static Thread drainTo(final java.io.InputStream in, final StringBuilder sb) {
+        Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    BufferedReader br = new BufferedReader(new InputStreamReader(in, "UTF-8"));
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        synchronized (sb) {
+                            sb.append(line).append('\n');
+                        }
+                    }
+                } catch (Exception ignored) {
+                }
+            }
+        });
+        t.setDaemon(true);
+        t.start();
+        return t;
     }
 
     // ================================================================ 关于页
@@ -956,14 +1076,22 @@ public class MainActivity extends Activity {
     /** 弹窗:发现新版本 → 去下载 / 忽略此版本 / 以后再说。 */
     private void showUpdateDialog(final String tag, String name, String body,
                                   final String apkUrl, final String pageUrl) {
-        String note = body == null ? "" : body.trim();
-        if (note.length() > 500) {
-            note = note.substring(0, 500) + "…";
-        }
-        String msg = (name == null || name.isEmpty() || name.equals(tag) ? "" : name + "\n\n") + note;
+        // 说明是 Markdown,直接塞进 TextView 会是满屏 #、** 和表格竖线;
+        // 先渲染成手机可读排版,再放进可滚动的正文区
+        CharSequence note = MarkdownLite.render(body);
+        String msg = name == null || name.isEmpty() || name.equals(tag) ? "" : name;
+        android.widget.TextView tv = new android.widget.TextView(this);
+        tv.setTextSize(13.5f);
+        tv.setTextColor(0xFF4A4F58);
+        tv.setLineSpacing(Ui.dp(this, 4), 1f);
+        int pad = Ui.dp(this, 16);
+        tv.setPadding(pad, Ui.dp(this, 8), pad, 0);
+        tv.setText(msg.isEmpty() ? note : (msg + "\n\n" + note));
+        android.widget.ScrollView sv = new android.widget.ScrollView(this);
+        sv.addView(tv);
         new android.app.AlertDialog.Builder(this)
                 .setTitle("发现新版本 " + tag)
-                .setMessage(msg.isEmpty() ? "有新版本可以更新。" : msg)
+                .setView(sv)
                 .setPositiveButton("去下载", new android.content.DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(android.content.DialogInterface d, int w) {
@@ -1111,8 +1239,9 @@ public class MainActivity extends Activity {
         }
         Prefs p = new Prefs(this);
         // 校验通过后才写盘:以前先 save 再报错,一次"保存失败"就把好友列表清空了
+        // 抖动不在这一页设置:传当前已存值,避免用本页过期副本把它覆盖回去
         p.save(aFriends.getText().toString(), aMsgs.getText().toString(), time,
-                parseJitter(aJitter, 10),
+                p.jitterMin(),
                 aTest.isChecked(), p.handleLockscreen(), p.lockAfterDone(), p.waitUnlockMin());
         p.setProtocolMode(false);
         // 页面上只有一个时间输入框:把它真正应用到调度用的 times 列表,
@@ -1140,7 +1269,7 @@ public class MainActivity extends Activity {
         }
         Prefs p = new Prefs(this);
         p.save(pFriends.getText().toString(), pMsgs.getText().toString(), time,
-                parseJitter(pJitter, 10),
+                p.jitterMin(),
                 pTest.isChecked(), p.handleLockscreen(), p.lockAfterDone(), p.waitUnlockMin());
         p.setProtocolMode(true);
         if (p.applySingleTime(time)) {
@@ -1172,6 +1301,10 @@ public class MainActivity extends Activity {
         }
         // 抖动值改了必须重排闹钟,否则新值要等下一个槽位触发才生效
         Scheduler.rescheduleAll(this);
+        // 让模式页下次进入时重新回填:否则它们还拿着改之前的旧值,
+        // 用户再点一次"保存"就会把这里刚改的抖动覆盖回去
+        inputsSynced = false;
+        refreshJitterInfo();
     }
 
     private void refreshSettings() {
@@ -1191,12 +1324,10 @@ public class MainActivity extends Activity {
         aFriends.setText(p.rawFriends());
         aMsgs.setText(joinMsgs(p));
         aTime.setText(p.sendTime());
-        aJitter.setText(String.valueOf(p.jitterMin()));
         aTest.setChecked(p.testOnly());
         pFriends.setText(p.rawFriends());
         pMsgs.setText(joinMsgs(p));
         pTime.setText(p.sendTime());
-        pJitter.setText(String.valueOf(p.jitterMin()));
         pTest.setChecked(p.testOnly());
     }
 

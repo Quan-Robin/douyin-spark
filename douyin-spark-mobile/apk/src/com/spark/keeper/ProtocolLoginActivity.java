@@ -29,7 +29,7 @@ public class ProtocolLoginActivity extends Activity {
         root.setOrientation(LinearLayout.VERTICAL);
 
         TextView tip = new TextView(this);
-        tip.setText("v0.3.3 · 用抖音 App 扫码 / 验证码登录网页版(登录态长期保存,完成后按返回键)");
+        tip.setText("v0.3.4 · 用抖音 App 扫码 / 验证码登录网页版(登录态长期保存,完成后按返回键)");
         tip.setPadding(dp(12), dp(8), dp(12), dp(8));
         root.addView(tip);
 

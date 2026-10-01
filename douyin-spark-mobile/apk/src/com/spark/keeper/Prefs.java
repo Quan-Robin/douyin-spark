@@ -181,13 +181,29 @@ public class Prefs {
         sp.edit().putBoolean("onboarded", v).apply();
     }
 
-    /** 自启动/后台弹出无法用 API 查询,由用户在引导里点「我已设置好」后记下来。 */
-    public static boolean isSelfStartConfirmed(Context c) {
+    /**
+     * 「系统不提供查询接口」的权限项(自启动、部分 ROM 的后台限制)由用户手动确认。
+     * 存成 manual_ok_<项号>,各项互不影响。
+     */
+    public static boolean isManualOk(Context c, int which) {
         return c.getSharedPreferences("spark", Context.MODE_PRIVATE)
-                .getBoolean("selfstart_ok", false);
+                .getBoolean("manual_ok_" + which, false);
+    }
+
+    public static void setManualOk(Context c, int which, boolean v) {
+        c.getSharedPreferences("spark", Context.MODE_PRIVATE)
+                .edit().putBoolean("manual_ok_" + which, v).apply();
+    }
+
+    /** 兼容旧字段:自启动确认等同于"第 3 项手动确认"。 */
+    public static boolean isSelfStartConfirmed(Context c) {
+        return isManualOk(c, 3)
+                || c.getSharedPreferences("spark", Context.MODE_PRIVATE)
+                   .getBoolean("selfstart_ok", false);
     }
 
     public static void setSelfStartConfirmed(Context c, boolean v) {
+        setManualOk(c, 3, v);
         c.getSharedPreferences("spark", Context.MODE_PRIVATE)
                 .edit().putBoolean("selfstart_ok", v).apply();
     }

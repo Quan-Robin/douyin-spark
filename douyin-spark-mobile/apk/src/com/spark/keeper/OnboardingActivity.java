@@ -1,6 +1,8 @@
 package com.spark.keeper;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.os.Bundle;
 import android.view.Gravity;
@@ -24,6 +26,8 @@ public class OnboardingActivity extends Activity {
     private LinearLayout modeBoxProto;
     private TextView summary;
     private boolean proto = false;
+    /** 跳到"系统查不到状态"的设置页(自启动/电池)后,回到应用要弹确认 */
+    private int pendingConfirm = -1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -37,6 +41,43 @@ public class OnboardingActivity extends Activity {
     protected void onResume() {
         super.onResume();
         refreshChecklist();
+        // 自启动/后台限制系统查不到:从设置页回来时直接问一句,
+        // 避免"明明给了权限,列表里还显示未完成"(用户反馈的问题)
+        if (pendingConfirm >= 0) {
+            int which = pendingConfirm;
+            pendingConfirm = -1;
+            askUnverifiable(which);
+        }
+    }
+
+    /**
+     * 无法用 API 查询的项:回到应用时弹一句确认。
+     * 不确认就永远显示"未完成" —— 这是用户最直接的困惑点。
+     */
+    private void askUnverifiable(final int which) {
+        if (PermissionGuide.isGranted(this, which)) {
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("已经在系统里允许了吗?")
+                .setMessage(PermissionGuide.title(which) + " 没有查询接口,只能由你确认。\n\n"
+                        + PermissionGuide.manualPath(which))
+                .setPositiveButton("已允许,标记完成", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        Prefs.setManualOk(OnboardingActivity.this, which, true);
+                        refreshChecklist();
+                    }
+                })
+                .setNeutralButton("再打开一次", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int w) {
+                        pendingConfirm = which;
+                        PermissionGuide.open(OnboardingActivity.this, which);
+                    }
+                })
+                .setNegativeButton("还没设置", null)
+                .show();
     }
 
     // ---------------------------------------------------------------- 界面
@@ -199,6 +240,10 @@ public class OnboardingActivity extends Activity {
                     chipText, chipBg, chipFg, new View.OnClickListener() {
                         @Override
                         public void onClick(View v) {
+                            // 自启动/电池优化跳出去之后,回来要主动问一句(见 onResume)
+                            if (which == PermissionGuide.P_AUTOSTART || which == PermissionGuide.P_BATTERY) {
+                                pendingConfirm = which;
+                            }
                             boolean opened = PermissionGuide.open(OnboardingActivity.this, which);
                             String path = PermissionGuide.manualPath(which);
                             if (!opened) {
@@ -215,12 +260,14 @@ public class OnboardingActivity extends Activity {
             checklist.addView(item, Ui.match());
             checklist.addView(Ui.spacer(this, 8));
 
-            if (which == PermissionGuide.P_AUTOSTART && !ok) {
-                Button okBtn = Ui.secondary(this, "我已在系统里设置好了");
+            if (!ok && (which == PermissionGuide.P_AUTOSTART || which == PermissionGuide.P_BATTERY)) {
+                Button okBtn = Ui.secondary(this, which == PermissionGuide.P_AUTOSTART
+                        ? "我已在系统里允许自启动 → 标记完成"
+                        : "我已设为不受限制 → 标记完成");
                 okBtn.setOnClickListener(new View.OnClickListener() {
                     @Override
                     public void onClick(View v) {
-                        Prefs.setSelfStartConfirmed(OnboardingActivity.this, true);
+                        Prefs.setManualOk(OnboardingActivity.this, which, true);
                         refreshChecklist();
                     }
                 });
@@ -229,9 +276,23 @@ public class OnboardingActivity extends Activity {
             }
         }
         if (summary != null) {
+            // 明确写出"还差哪几项",比只给一个分数有用
+            StringBuilder missing = new StringBuilder();
+            for (int k = 0; k < PermissionGuide.P_COUNT; k++) {
+                if (k == PermissionGuide.P_WRITE_SETTINGS) {
+                    continue; // 可选(只有勾了静默亮度才需要)
+                }
+                if (!PermissionGuide.isGranted(this, k)) {
+                    if (missing.length() > 0) {
+                        missing.append("、");
+                    }
+                    missing.append(PermissionGuide.title(k));
+                }
+            }
             summary.setText("已完成 " + done + " / " + PermissionGuide.P_COUNT + " 项"
-                    + (done >= PermissionGuide.P_COUNT - 1 ? " · 可以开始使用了 ✅"
-                       : " · 带「去设置」的都建议点开确认一下"));
+                    + (missing.length() == 0
+                        ? " · 可以开始使用了 ✅"
+                        : "\n还差:" + missing + "(点对应那一行去设置)"));
         }
     }
 

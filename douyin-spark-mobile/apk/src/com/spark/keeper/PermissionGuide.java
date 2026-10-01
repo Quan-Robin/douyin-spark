@@ -123,8 +123,10 @@ public class PermissionGuide {
             switch (which) {
                 case P_A11Y: return isAccessibilityEnabled(c);
                 case P_OVERLAY: return Build.VERSION.SDK_INT < 23 || Settings.canDrawOverlays(c);
-                case P_BATTERY: return isIgnoringBattery(c);
-                case P_AUTOSTART: return Prefs.isSelfStartConfirmed(c);
+                case P_BATTERY:
+                    // 部分 ROM 的「省电策略:无限制」不等于系统电池优化白名单,查不到也允许手动确认
+                    return isIgnoringBattery(c) || Prefs.isManualOk(c, P_BATTERY);
+                case P_AUTOSTART: return Prefs.isManualOk(c, P_AUTOSTART);
                 case P_NOTIFY:
                     return Build.VERSION.SDK_INT < 33
                             || c.checkSelfPermission("android.permission.POST_NOTIFICATIONS")

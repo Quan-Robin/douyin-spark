@@ -1,34 +1,30 @@
 # ============================================================
-# 隐私与凭据(最高优先级:绝对不能提交)
+# 闅愮涓庡嚟鎹?鏈€楂樹紭鍏堢骇:缁濆涓嶈兘鎻愪氦)
 # ============================================================
-# 浏览器登录态:里面是完整的 Chrome profile,含抖音 Cookie / 历史记录
+# 娴忚鍣ㄧ櫥褰曟€?閲岄潰鏄畬鏁寸殑 Chrome profile,鍚姈闊?Cookie / 鍘嗗彶璁板綍
 douyin-spark-keeper/user_data/
-# 你的真实配置(好友名、消息内容)
+# 浣犵殑鐪熷疄閰嶇疆(濂藉弸鍚嶃€佹秷鎭唴瀹?
 douyin-spark-keeper/config.yaml
-# 运行日志、失败截图、probe 结果(可能含聊天截图)
+# 杩愯鏃ュ織銆佸け璐ユ埅鍥俱€乸robe 缁撴灉(鍙兘鍚亰澶╂埅鍥?
 douyin-spark-keeper/logs/
-# 当日发送记录(含好友昵称)
+# 褰撴棩鍙戦€佽褰?鍚ソ鍙嬫樀绉?
 douyin-spark-keeper/state.json
 
-# AutoX.js 脚本版的运行数据
+# AutoX.js 鑴氭湰鐗堢殑杩愯鏁版嵁
 douyin-spark-mobile/logs/
 douyin-spark-mobile/spark_state.json
 
 # ============================================================
-# 构建产物
+# 鏋勫缓浜х墿
 # ============================================================
 douyin-spark-mobile/apk/build/
 douyin-spark-mobile/SparkKeeper.apk
 douyin-spark-mobile/SparkKeeper.apk.idsig
-# 调试签名(构建时用 keytool 自动重新生成,不必入库)
+# 璋冭瘯绛惧悕(鏋勫缓鏃剁敤 keytool 鑷姩閲嶆柊鐢熸垚,涓嶅繀鍏ュ簱)
 douyin-spark-mobile/apk/debug.keystore
 
 # ============================================================
-# 与本项目无关的内容
-# 注意:D:\AI\DSH 是共用工作目录,里面还有 wallpaper-schedule 等其他项目。
-# 如果你在仓库根目录执行 git add .,这些会被一起提交 —— 必须排除。
-# (更稳妥的做法:把 douyin-spark-keeper / douyin-spark-mobile 单独放到一个
-#  目录再 git init,见 docs/publishing-checklist.md)
+# 涓庢湰椤圭洰鏃犲叧鐨勫唴瀹?# 娉ㄦ剰:D:\AI\DSH 鏄叡鐢ㄥ伐浣滅洰褰?閲岄潰杩樻湁 wallpaper-schedule 绛夊叾浠栭」鐩€?# 濡傛灉浣犲湪浠撳簱鏍圭洰褰曟墽琛?git add .,杩欎簺浼氳涓€璧锋彁浜?鈥斺€?蹇呴』鎺掗櫎銆?# (鏇寸ǔ濡ョ殑鍋氭硶:鎶?douyin-spark-keeper / douyin-spark-mobile 鍗曠嫭鏀惧埌涓€涓?#  鐩綍鍐?git init,瑙?docs/publishing-checklist.md)
 # ============================================================
 legacy/
 tests/
@@ -38,7 +34,7 @@ DOCS-README.md
 debug.log
 
 # ============================================================
-# 其他
+# 鍏朵粬
 # ============================================================
 __pycache__/
 *.pyc
@@ -49,5 +45,8 @@ __pycache__/
 Thumbs.db
 .review-scratch/
 .fix-build/
-# 本地工具(便携版 gh 等,不属于仓库内容)
+# 鏈湴宸ュ叿(渚挎惡鐗?gh 绛?涓嶅睘浜庝粨搴撳唴瀹?
 .tools/
+# 编译/校验用的临时目录(不要提交)
+.tmpb/
+.fix-build/

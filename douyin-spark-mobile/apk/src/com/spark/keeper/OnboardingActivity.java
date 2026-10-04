@@ -32,7 +32,7 @@ public class OnboardingActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        Ui.pageBackground(this);
+        Ui.applyTheme(this);
         proto = new Prefs(this).preferredProtocol();
         setContentView(build());
     }
@@ -108,11 +108,12 @@ public class OnboardingActivity extends Activity {
 
         // 模式选择
         root.addView(Ui.section(this, "第一步 · 选择发送方式(两种都可用,可随时切换)"));
-        modeBoxA11y = modeCard(false);
+        modeBoxA11y = Ui.column(this);
         root.addView(modeBoxA11y, Ui.match());
         root.addView(Ui.spacer(this, 8));
-        modeBoxProto = modeCard(true);
+        modeBoxProto = Ui.column(this);
         root.addView(modeBoxProto, Ui.match());
+        fillModeCards();
         root.addView(Ui.spacer(this, 6));
         TextView tip = Ui.label(this, "不确定选哪个?先用「无障碍模式」跑通,再试协议模式。");
         root.addView(tip);
@@ -155,6 +156,14 @@ public class OnboardingActivity extends Activity {
         return sc;
     }
 
+    /** 原地刷新两张模式卡:切换选中不再整页 setContentView(以前会丢滚动位置)。 */
+    private void fillModeCards() {
+        modeBoxA11y.removeAllViews();
+        modeBoxA11y.addView(modeCard(false), Ui.match());
+        modeBoxProto.removeAllViews();
+        modeBoxProto.addView(modeCard(true), Ui.match());
+    }
+
     private LinearLayout modeCard(final boolean protocol) {
         LinearLayout card = Ui.clickableCard(this);
         LinearLayout top = Ui.row(this);
@@ -192,7 +201,7 @@ public class OnboardingActivity extends Activity {
             public void onClick(View v) {
                 proto = protocol;
                 new Prefs(OnboardingActivity.this).setPreferredProtocol(protocol);
-                setContentView(build());
+                fillModeCards();
             }
         });
         return card;

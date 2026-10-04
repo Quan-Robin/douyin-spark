@@ -52,21 +52,27 @@ echo "[2/7] aapt2 编译资源与生成 R.java"
 
 echo "[3/7] javac 编译"
 find src build/gen -name "*.java" > build/sources.txt
+# Shizuku 依赖库(libs/*.jar):编译与打包都必须带上,否则 ShizukuShell 编不过、
+# 运行时 ShizukuProvider 也找不到类
+LIBS_CP="libs/shizuku-aidl.jar;libs/shizuku-api.jar;libs/shizuku-provider.jar"
 "$JAVAC" -source 8 -target 8 -Xlint:-options -encoding UTF-8 \
-    -bootclasspath "$PLATFORM" \
+    -bootclasspath "$PLATFORM" -classpath "$LIBS_CP" \
     -d build/obj @build/sources.txt
 
 echo "[4/7] d8 转 dex"
 find build/obj -name "*.class" > build/classes.txt
 # 默认走 R8(裁剪 + 混淆,实测 dex 小约 19%);规则见 proguard-rules.pro,
 # 里面保住了清单声明的组件和 @JavascriptInterface 方法。
+# Shizuku 三个 jar 作为程序输入一起进 dex(proguard-rules 已整体保留)。
 # 真机上万一出现异常,用  NO_SHRINK=1 bash build.sh  可回退到纯 d8。
 if [ "${NO_SHRINK:-0}" = "1" ]; then
     echo "  (NO_SHRINK=1:使用 d8,不做裁剪)"
-    "$D8" --release --min-api 24 --lib "$PLATFORM" --output build/dex @build/classes.txt
+    "$D8" --release --min-api 24 --lib "$PLATFORM" --output build/dex \
+        @build/classes.txt libs/shizuku-aidl.jar libs/shizuku-api.jar libs/shizuku-provider.jar
 else
     "$JAVA" -cp "$BT/lib/d8.jar" com.android.tools.r8.R8 --release --min-api 24 \
-        --lib "$PLATFORM" --output build/dex --pg-conf proguard-rules.pro @build/classes.txt
+        --lib "$PLATFORM" --output build/dex --pg-conf proguard-rules.pro \
+        @build/classes.txt libs/shizuku-aidl.jar libs/shizuku-api.jar libs/shizuku-provider.jar
 fi
 
 echo "[5/7] 打入 classes.dex"

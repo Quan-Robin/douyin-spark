@@ -32,7 +32,8 @@ import java.util.Date;
 import java.util.Locale;
 
 /**
- * 主壳:左侧图标侧边栏(首页/无障碍/协议/设置/关于)+ 内容区 + 顶部标题栏(返回/三点菜单)。
+ * 主壳:底部导航栏(首页/无障碍/协议/设置/关于)+ 内容区 + 顶部标题栏(返回/三点菜单)。
+ * 底部导航替代早期版本的左侧图标竖栏:手机端拇指可达、带文字标签、内容区更宽。
  */
 public class MainActivity extends Activity {
 
@@ -49,18 +50,20 @@ public class MainActivity extends Activity {
     private static final long AUTO_CHECK_INTERVAL = 24L * 60 * 60 * 1000;
 
     private static final int PG_HOME = 0, PG_A11Y = 1, PG_PROTO = 2, PG_SETTINGS = 3, PG_ABOUT = 4;
-    private static final String[] TITLES = {"续火花", "📱 无障碍模式", "🌐 协议模式", "⚙️ 基本设置", "ℹ️ 关于"};
-    private static final String[] RAIL_ICONS = {"🏠", "📱", "🌐", "⚙️", "ℹ️"};
-
-    private LinearLayout rail;
-    private View[] railItems = new View[5];
-    private static final int[] RAIL_DRAWABLES = {
+    private static final String[] TITLES = {"续火花", "无障碍模式", "协议模式", "基本设置", "关于"};
+    private static final String[] NAV_LABELS = {"首页", "无障碍", "协议", "设置", "关于"};
+    private static final int[] NAV_DRAWABLES = {
             R.drawable.ic_home, R.drawable.ic_phone, R.drawable.ic_globe,
             R.drawable.ic_settings, R.drawable.ic_info
     };
+
+    private ImageView[] navIcons = new ImageView[5];
+    private TextView[] navLabels = new TextView[5];
     private TextView tvChipMode, tvChipA11y, tvChipOverlay;
     private View[] pages = new View[5];
-    private TextView tvTitle, tvBack, tvHomeStatus, aStatus, pStatus;
+    private TextView tvTitle, tvBack;
+    private TextView aStatus, pStatus;
+    private LinearLayout homeRows;
     private int current = PG_HOME;
     /** 无障碍/协议页的输入框是否已从配置回填(避免每次切页把未保存的输入冲掉)。 */
     private boolean inputsSynced;
@@ -77,6 +80,10 @@ public class MainActivity extends Activity {
     private EditText sPin;
     private TextView tvRootStatus;
     private TextView tvSettingsHint;
+    /** 外观(深色模式)三个选项的徽章,按选中态刷新。 */
+    private TextView[] themeChips = new TextView[3];
+    /** 外观切换后 recreate,让它回到设置页而不是首页(recreate 之间靠静态字段传递)。 */
+    private static int pendingPage = -1;
     /** 回填设置页时抑制监听器,避免 setChecked/setText 触发一轮自动保存 */
     private boolean applyingSettings;
     private final android.os.Handler autoSaveHandler =
@@ -91,7 +98,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        Ui.pageBackground(this);
+        Ui.applyTheme(this);
         setContentView(buildShell());
 
         if (Prefs.isLockDisabledFlag(this)) {
@@ -163,10 +170,11 @@ public class MainActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
 
+        // ---- 顶部标题栏:返回 + 标题 + 三点菜单 ----
         LinearLayout topBar = new LinearLayout(this);
         topBar.setOrientation(LinearLayout.HORIZONTAL);
         topBar.setGravity(Gravity.CENTER_VERTICAL);
-        topBar.setBackgroundColor(Color.WHITE);
+        topBar.setBackgroundColor(Ui.BAR_BG);
         int tb = Ui.dp(this, 12);
         topBar.setPadding(tb, tb, tb, tb);
         tvBack = new TextView(this);
@@ -179,7 +187,8 @@ public class MainActivity extends Activity {
         tvBack.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                showPage(PG_HOME);
+        showPage(pendingPage >= 0 ? pendingPage : PG_HOME);
+        pendingPage = -1;
             }
         });
         topBar.addView(tvBack);
@@ -205,43 +214,9 @@ public class MainActivity extends Activity {
         topBar.addView(menu);
         root.addView(topBar, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(Ui.hairline(this));
 
-        LinearLayout body = new LinearLayout(this);
-        body.setOrientation(LinearLayout.HORIZONTAL);
-
-        LinearLayout railBox = new LinearLayout(this);
-        railBox.setOrientation(LinearLayout.VERTICAL);
-        railBox.setGravity(Gravity.CENTER_HORIZONTAL);
-        railBox.setBackground(Ui.rounded(0xFFECEEF2, 18, this));
-        railBox.setPadding(Ui.dp(this, 6), Ui.dp(this, 10), Ui.dp(this, 6), Ui.dp(this, 10));
-        LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(
-                Ui.dp(this, 56), ViewGroup.LayoutParams.MATCH_PARENT);
-        rlp.rightMargin = Ui.dp(this, 10);
-
-        for (int i = 0; i < RAIL_DRAWABLES.length; i++) {
-            final int idx = i;
-            ImageView item = new ImageView(this);
-            item.setImageResource(RAIL_DRAWABLES[i]);
-            item.setColorFilter(Ui.TEXT_SUB);
-            item.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            int inner = Ui.dp(this, 22);
-            item.setPadding(0, 0, 0, 0);
-            LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(
-                    Ui.dp(this, 44), Ui.dp(this, 44));
-            if (i > 0) {
-                ip.topMargin = Ui.dp(this, 8);
-            }
-            item.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    showPage(idx);
-                }
-            });
-            railBox.addView(item, ip);
-            railItems[i] = item;
-        }
-        body.addView(railBox, rlp);
-
+        // ---- 内容区 ----
         FrameLayout content = new FrameLayout(this);
         pages[PG_HOME] = buildHomePage();
         pages[PG_A11Y] = buildA11yPage();
@@ -253,10 +228,48 @@ public class MainActivity extends Activity {
             content.addView(pg, new FrameLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         }
-        body.addView(content, new LinearLayout.LayoutParams(
-                0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
-        root.addView(body, new LinearLayout.LayoutParams(
+        root.addView(content, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        // ---- 底部导航:图标 + 文字,选中项高亮主色 ----
+        root.addView(Ui.hairline(this));
+        LinearLayout nav = new LinearLayout(this);
+        nav.setOrientation(LinearLayout.HORIZONTAL);
+        nav.setBackgroundColor(Ui.BAR_BG);
+        for (int i = 0; i < NAV_DRAWABLES.length; i++) {
+            final int idx = i;
+            LinearLayout item = new LinearLayout(this);
+            item.setOrientation(LinearLayout.VERTICAL);
+            item.setGravity(Gravity.CENTER);
+            item.setPadding(0, Ui.dp(this, 7), 0, Ui.dp(this, 7));
+            item.setMinimumHeight(Ui.dp(this, 56));
+            item.setBackground(Ui.clickable(Ui.BAR_BG, 0, this));
+            item.setClickable(true);
+
+            ImageView icon = new ImageView(this);
+            icon.setImageResource(NAV_DRAWABLES[i]);
+            icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+            item.addView(icon, new LinearLayout.LayoutParams(Ui.dp(this, 24), Ui.dp(this, 24)));
+
+            TextView label = new TextView(this);
+            label.setText(NAV_LABELS[i]);
+            label.setTextSize(10.5f);
+            label.setPadding(0, Ui.dp(this, 2), 0, 0);
+            item.addView(label);
+
+            item.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    showPage(idx);
+                }
+            });
+            nav.addView(item, new LinearLayout.LayoutParams(
+                    0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            navIcons[i] = icon;
+            navLabels[i] = label;
+        }
+        root.addView(nav, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         return root;
     }
 
@@ -269,14 +282,11 @@ public class MainActivity extends Activity {
         for (int i = 0; i < pages.length; i++) {
             pages[i].setVisibility(i == pg ? View.VISIBLE : View.GONE);
         }
-        for (int i = 0; i < railItems.length; i++) {
+        for (int i = 0; i < navIcons.length; i++) {
             boolean on = i == pg;
-            railItems[i].setBackground(on ? Ui.rounded(0xFFFFFFFF, 12, this) : null);
-            if (railItems[i] instanceof ImageView) {
-                ((ImageView) railItems[i]).setColorFilter(on ? Ui.PRIMARY : Ui.TEXT_SUB);
-            } else if (railItems[i] instanceof TextView) {
-                ((TextView) railItems[i]).setTextColor(on ? Ui.PRIMARY : Ui.TEXT_SUB);
-            }
+            navIcons[i].setColorFilter(on ? Ui.PRIMARY : Ui.TEXT_SUB);
+            navLabels[i].setTextColor(on ? Ui.PRIMARY : Ui.TEXT_SUB);
+            navLabels[i].setTypeface(on ? Typeface.DEFAULT_BOLD : Typeface.DEFAULT);
         }
         tvBack.setVisibility(pg == PG_HOME ? View.GONE : View.VISIBLE);
         tvTitle.setText(TITLES[pg]);
@@ -326,15 +336,7 @@ public class MainActivity extends Activity {
 
     // ================================================================ 通用 UI 构件
     private LinearLayout card() {
-        LinearLayout c = new LinearLayout(this);
-        c.setOrientation(LinearLayout.VERTICAL);
-        c.setBackground(Ui.rounded(Ui.CARD_BG, 16, this));
-        int p = Ui.dp(this, 14);
-        c.setPadding(p, p, p, p);
-        if (android.os.Build.VERSION.SDK_INT >= 21) {
-            c.setElevation(Ui.dp(this, 2));
-        }
-        return c;
+        return Ui.card(this);
     }
 
     private LinearLayout hRow() {
@@ -393,14 +395,14 @@ public class MainActivity extends Activity {
         ScrollView sc = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        int pad = Ui.dp(this, 6);
+        int pad = Ui.dp(this, 10);
         root.setPadding(pad, pad, pad, pad);
         sc.addView(root, lpFull());
 
-        // ---- 状态卡 ----
+        // ---- 状态卡:头部 + 徽章 + 结构化信息行 ----
         LinearLayout stCard = Ui.card(this);
         LinearLayout head = Ui.row(this);
-        head.addView(Ui.icon(this, R.mipmap.ic_launcher, 40));
+        head.addView(Ui.icon(this, R.mipmap.ic_launcher, 44));
         LinearLayout headTexts = Ui.column(this);
         TextView ht = new TextView(this);
         ht.setText("续火花");
@@ -431,10 +433,18 @@ public class MainActivity extends Activity {
         chips.addView(tvChipOverlay, c2);
         stCard.addView(chips, Ui.match());
 
-        tvHomeStatus = Ui.statusBox(this, "");
+        // 结构化信息行(标签 + 数值),refreshHome() 负责填充
+        LinearLayout rowsBox = new LinearLayout(this);
+        rowsBox.setOrientation(LinearLayout.VERTICAL);
+        rowsBox.setBackground(Ui.rounded(Ui.INPUT_BG, 12, this));
+        int rp = Ui.dp(this, 12);
+        rowsBox.setPadding(rp, Ui.dp(this, 4), rp, Ui.dp(this, 4));
+        homeRows = new LinearLayout(this);
+        homeRows.setOrientation(LinearLayout.VERTICAL);
+        rowsBox.addView(homeRows, Ui.match());
         LinearLayout.LayoutParams slp = Ui.match();
         slp.topMargin = Ui.dp(this, 10);
-        stCard.addView(tvHomeStatus, slp);
+        stCard.addView(rowsBox, slp);
         root.addView(stCard, lpFull());
         root.addView(Ui.spacer(this, 12));
 
@@ -498,7 +508,28 @@ public class MainActivity extends Activity {
                         showPage(PG_ABOUT);
                     }
                 }), lpFull());
+        root.addView(Ui.spacer(this, 12));
         return sc;
+    }
+
+    /** 首页状态区的一行:左标签、右数值。 */
+    private LinearLayout homeRow(String label, String value, int valueColor) {
+        LinearLayout r = Ui.row(this);
+        r.setPadding(0, Ui.dp(this, 7), 0, Ui.dp(this, 7));
+        TextView k = new TextView(this);
+        k.setText(label);
+        k.setTextSize(13);
+        k.setTextColor(Ui.TEXT_SUB);
+        r.addView(k);
+        TextView v = new TextView(this);
+        v.setText(value);
+        v.setTextSize(13.5f);
+        v.setTypeface(Typeface.DEFAULT_BOLD);
+        v.setTextColor(valueColor);
+        v.setGravity(Gravity.RIGHT);
+        r.addView(v, new LinearLayout.LayoutParams(0,
+                LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        return r;
     }
 
     /** 首页上的模式卡片(带图标、说明与当前启用状态)。 */
@@ -542,7 +573,7 @@ public class MainActivity extends Activity {
         ScrollView sc = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        int pad = Ui.dp(this, 6);
+        int pad = Ui.dp(this, 10);
         root.setPadding(pad, pad, pad, pad);
         sc.addView(root, lpFull());
 
@@ -578,9 +609,7 @@ public class MainActivity extends Activity {
         root.addView(cfgCard);
         root.addView(Ui.spacer(this, 12));
 
-        aTest = new CheckBox(this);
-        aTest.setText("测试模式(走完整流程但不点发送)");
-        aTest.setTextSize(13);
+        aTest = Ui.check(this, "测试模式(走完整流程但不点发送)");
         root.addView(aTest);
         root.addView(Ui.spacer(this, 12));
 
@@ -621,7 +650,7 @@ public class MainActivity extends Activity {
         ScrollView sc = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        int pad = Ui.dp(this, 6);
+        int pad = Ui.dp(this, 10);
         root.setPadding(pad, pad, pad, pad);
         sc.addView(root, lpFull());
 
@@ -675,9 +704,7 @@ public class MainActivity extends Activity {
         root.addView(cfgCard);
         root.addView(Ui.spacer(this, 12));
 
-        pTest = new CheckBox(this);
-        pTest.setText("测试模式(走完整流程但不点发送)");
-        pTest.setTextSize(13);
+        pTest = Ui.check(this, "测试模式(走完整流程但不点发送)");
         root.addView(pTest);
         root.addView(Ui.spacer(this, 12));
 
@@ -713,18 +740,49 @@ public class MainActivity extends Activity {
         ScrollView sc = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        int pad = Ui.dp(this, 6);
+        int pad = Ui.dp(this, 10);
         root.setPadding(pad, pad, pad, pad);
         sc.addView(root, lpFull());
 
         LinearLayout cardGen = card();
         cardGen.addView(Ui.section(this, "通用"));
         // 勾选/取消立即生效:以前只在按"保存设置"时写盘,切页回来又被覆盖
-        sAutoUpdate = new CheckBox(this);
-        sAutoUpdate.setText("自动检查更新(每天一次,可忽略某个版本)");
-        sAutoUpdate.setTextSize(13);
+        sAutoUpdate = Ui.check(this, "自动检查更新(每天一次,可忽略某个版本)");
         cardGen.addView(sAutoUpdate);
         root.addView(cardGen);
+        root.addView(Ui.spacer(this, 12));
+
+        // ---- 外观:跟随系统 / 浅色 / 深色,点了立即生效 ----
+        LinearLayout cardLook = card();
+        cardLook.addView(Ui.section(this, "外观"));
+        LinearLayout themeRow = Ui.row(this);
+        String[] themeNames = {"跟随系统", "浅色", "深色"};
+        for (int i = 0; i < 3; i++) {
+            final int mode = i;
+            TextView chipT = Ui.chip(this, themeNames[i], Ui.INPUT_BG, Ui.TEXT_SUB);
+            LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            if (i > 0) {
+                clp.leftMargin = Ui.dp(this, 8);
+            }
+            chipT.setPadding(Ui.dp(this, 14), Ui.dp(this, 7), Ui.dp(this, 14), Ui.dp(this, 7));
+            chipT.setTextSize(13);
+            chipT.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    new Prefs(MainActivity.this).setDarkMode(mode);
+                    Ui.applyTheme(MainActivity.this);
+                    pendingPage = PG_SETTINGS; // recreate 后停在设置页
+                    recreate();
+                }
+            });
+            themeRow.addView(chipT, clp);
+            themeChips[i] = chipT;
+        }
+        cardLook.addView(themeRow, Ui.match());
+        refreshThemeChips();
+        cardLook.addView(Ui.label(this, "深色模式只影响本应用的界面配色"));
+        root.addView(cardLook);
         root.addView(Ui.spacer(this, 12));
 
         LinearLayout cardT = Ui.card(this);
@@ -776,30 +834,20 @@ public class MainActivity extends Activity {
 
         LinearLayout cardA = card();
         cardA.addView(Ui.section(this, "无障碍模式 · 高级选项"));
-        sLock = new CheckBox(this);
-        sLock.setText("锁屏处理:自动亮屏/滑动解锁,密码锁则等你解锁后补跑");
-        sLock.setTextSize(13);
+        sLock = Ui.check(this, "锁屏处理:自动亮屏/滑动解锁,密码锁则等你解锁后补跑");
         cardA.addView(sLock);
-        sLockAfter = new CheckBox(this);
-        sLockAfter.setText("完成后自动回锁屏幕(仅限脚本自己解锁的情况)");
-        sLockAfter.setTextSize(13);
+        sLockAfter = Ui.check(this, "完成后自动回锁屏幕(仅限脚本自己解锁的情况)");
         cardA.addView(sLockAfter);
-        sKeepAlive = new CheckBox(this);
-        sKeepAlive.setText("常驻保活(降低无障碍被系统杀掉的概率)");
-        sKeepAlive.setTextSize(13);
+        sKeepAlive = Ui.check(this, "常驻保活(降低无障碍被系统杀掉的概率)");
         cardA.addView(sKeepAlive);
-        sDim = new CheckBox(this);
-        sDim.setText("运行时屏幕调至最低亮度(需「修改系统设置」权限)");
-        sDim.setTextSize(13);
+        sDim = Ui.check(this, "运行时屏幕调至最低亮度(需「修改系统设置」权限)");
         cardA.addView(sDim);
         root.addView(cardA);
         root.addView(Ui.spacer(this, 12));
 
         LinearLayout cardR = card();
         cardR.addView(Ui.section(this, "锁屏自动解锁(仅 PIN/数字密码有效;指纹、人脸无法模拟)"));
-        sRoot = new CheckBox(this);
-        sRoot.setText("优先用 Root 解锁(没有 root 就别勾,免 root 通道会自动生效)");
-        sRoot.setTextSize(13);
+        sRoot = Ui.check(this, "优先用 Root 解锁(没有 root 就别勾,免 root 通道会自动生效)");
         cardR.addView(sRoot);
         sPin = Ui.input(this, "锁屏 PIN 码(免 root 也会用它点锁屏键盘)");
         sPin.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
@@ -1071,16 +1119,15 @@ public class MainActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER_HORIZONTAL);
-        int pad = Ui.dp(this, 6);
-        root.setPadding(pad, Ui.dp(this, 30), pad, pad);
+        int pad = Ui.dp(this, 10);
+        root.setPadding(pad, Ui.dp(this, 24), pad, pad);
         sc.addView(root, lpFull());
 
-        TextView logo = new TextView(this);
-        logo.setText("🔥");
-        logo.setTextSize(52);
-        logo.setGravity(Gravity.CENTER);
-        root.addView(logo, lpFull());
-        root.addView(Ui.spacer(this, 8));
+        ImageView logo = Ui.icon(this, R.mipmap.ic_launcher, 64);
+        LinearLayout.LayoutParams llp = new LinearLayout.LayoutParams(
+                Ui.dp(this, 64), Ui.dp(this, 64));
+        root.addView(logo, llp);
+        root.addView(Ui.spacer(this, 10));
 
         TextView name = new TextView(this);
         name.setText("抖音自动续火花");
@@ -1106,7 +1153,7 @@ public class MainActivity extends Activity {
         card.addView(aboutLine("功能", "定时给指定好友发送消息,维持火花不断"));
         card.addView(aboutLine("模式", "无障碍模式(已验证)/ 协议模式(实验性)"));
         card.addView(aboutLine("日志", "Android/data/com.spark.keeper/files/"));
-        card.addView(aboutLine("更新源", "Gitee(预留,待配置)"));
+        card.addView(aboutLine("更新源", "Gitee / GitHub Releases(自动切换,每天至多检查一次)"));
         card.addView(aboutLine("数据存储", "全部保存在本机,不上传任何服务器"));
         root.addView(card);
         root.addView(Ui.spacer(this, 12));
@@ -1499,6 +1546,21 @@ public class MainActivity extends Activity {
         sPin.setText(p.rootPin());
         sJitter.setText(String.valueOf(p.jitterMin()));
         applyingSettings = false;
+        refreshThemeChips();
+    }
+
+    /** 外观选项的选中态:当前模式 = 主色底白字,其余 = 灰底。 */
+    private void refreshThemeChips() {
+        int mode = new Prefs(this).darkMode();
+        for (int i = 0; i < themeChips.length; i++) {
+            if (themeChips[i] == null) {
+                continue;
+            }
+            boolean on = i == mode;
+            themeChips[i].setBackground(Ui.rounded(
+                    on ? Ui.PRIMARY : Ui.INPUT_BG, 12, this));
+            themeChips[i].setTextColor(on ? 0xFFFFFFFF : Ui.TEXT_SUB);
+        }
     }
 
     private void syncInputs() {
@@ -1565,23 +1627,30 @@ public class MainActivity extends Activity {
 
     private void refreshHome() {
         Prefs p = new Prefs(this);
-        StringBuilder sb = new StringBuilder();
-        sb.append("发送模式: ").append(p.protocolMode() ? "🌐 协议模式(网页后台)" : "📱 无障碍模式").append("\n");
-        if (SparkService.RUNNING) {
-            sb.append("状态: 🔄 正在运行…\n");
-        }
-        if (p.nextRun() > 0) {
-            SimpleDateFormat f = new SimpleDateFormat("MM-dd HH:mm", Locale.US);
-            sb.append("下次运行: ").append(f.format(new Date(p.nextRun())));
-            if (p.jitterMin() > 0) {
-                sb.append("(±").append(p.jitterMin()).append("分钟)");
+        if (homeRows != null) {
+            homeRows.removeAllViews();
+            homeRows.addView(homeRow("发送模式",
+                    p.protocolMode() ? "🌐 协议模式(网页后台)" : "📱 无障碍模式", Ui.TEXT_MAIN));
+            if (SparkService.RUNNING) {
+                homeRows.addView(homeRow("当前状态", "🔄 正在运行…", Ui.PRIMARY));
             }
-            sb.append("\n");
+            String next;
+            if (p.nextRun() > 0) {
+                SimpleDateFormat f = new SimpleDateFormat("MM-dd HH:mm", Locale.US);
+                next = f.format(new Date(p.nextRun()));
+                if (p.jitterMin() > 0) {
+                    next += "(±" + p.jitterMin() + "分钟)";
+                }
+            } else {
+                next = "未设置(到模式页保存一次)";
+            }
+            homeRows.addView(homeRow("下次运行", next, Ui.TEXT_MAIN));
+            String today = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date());
+            String st = p.todayState(today);
+            boolean sent = st != null && !st.isEmpty();
+            homeRows.addView(homeRow("今日发送", sent ? st : "尚未执行",
+                    sent ? Ui.OK : Ui.TEXT_SUB));
         }
-        String today = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date());
-        String st = p.todayState(today);
-        sb.append("今日发送: ").append(st.isEmpty() ? "尚未执行" : st);
-        tvHomeStatus.setText(sb.toString());
 
         // 顶部状态徽章
         if (tvChipMode != null) {

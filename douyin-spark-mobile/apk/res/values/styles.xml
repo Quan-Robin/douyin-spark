@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      应用主题:无 ActionBar 的浅色底主题。
+      之前没写主题时用的是设备默认主题(多数机型自带 ActionBar),
+      会和界面里的自定义顶栏叠成双标题栏。
+      状态栏/导航栏颜色与深色模式由 Ui.applyTheme() 在运行时统一处理。
+    -->
+    <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:colorAccent">#FE2C55</item>
+    </style>
+</resources>

@@ -375,6 +375,15 @@ public class Prefs {
         sp.edit().putBoolean("autoCheckUpdate", v).apply();
     }
 
+    // ---- 外观:深色模式(0 跟随系统 / 1 浅色 / 2 深色) ----
+    public int darkMode() {
+        return sp.getInt("darkMode", 0);
+    }
+
+    public void setDarkMode(int v) {
+        sp.edit().putInt("darkMode", v).apply();
+    }
+
     // ---- 实验性:协议模式(网页后台直发) ----
     public boolean protocolMode() {
         return sp.getBoolean("protocolMode", false);

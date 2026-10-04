@@ -73,6 +73,9 @@ public class TimeRowsEditor extends LinearLayout {
         LinearLayout row = new LinearLayout(ctx);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
+        // 药丸行:滚轮放进浅底圆角容器里,视觉上是一整个时间项
+        row.setBackground(Ui.rounded(Ui.INPUT_BG, 14, ctx));
+        row.setPadding(Ui.dp(ctx, 10), Ui.dp(ctx, 6), Ui.dp(ctx, 6), Ui.dp(ctx, 6));
 
         NumberPicker hour = makePicker(0, 23, Integer.parseInt(times.get(idx).substring(0, 2)));
         NumberPicker min = makePicker(0, 59, Integer.parseInt(times.get(idx).substring(3, 5)));
@@ -121,41 +124,68 @@ public class TimeRowsEditor extends LinearLayout {
         row.addView(colon);
         row.addView(min, pp);
 
-        TextView add = new TextView(ctx);
-        add.setText("＋");
-        add.setTextSize(20);
-        add.setTextColor(0xFF8A8F99);
-        add.setPadding(Ui.dp(ctx, 12), 0, Ui.dp(ctx, 6), 0);
-        add.setOnClickListener(new OnClickListener() {
+        // 把按钮顶到行尾
+        View fill = new View(ctx);
+        row.addView(fill, new LinearLayout.LayoutParams(0, 1, 1f));
+
+        row.addView(roundButton("＋", Ui.PRIMARY, new OnClickListener() {
             @Override
             public void onClick(View v) {
                 times.add(idx + 1, "12:00");
                 rebuild();
                 notifyChanged();
             }
-        });
-        row.addView(add);
+        }));
 
-        TextView del = new TextView(ctx);
-        del.setText("✕");
-        del.setTextSize(18);
-        del.setPadding(Ui.dp(ctx, 8), 0, Ui.dp(ctx, 4), 0);
         if (times.size() <= 1) {
-            del.setTextColor(0xFFC8CCD2); // 至少保留一行
-            del.setOnClickListener(null);
+            // 至少保留一行:删除键置灰且不可点
+            TextView del = roundButton("✕", 0xFFC8CCD2, null);
+            row.addView(withLeftMargin(del));
         } else {
-            del.setTextColor(0xFF8A8F99);
-            del.setOnClickListener(new OnClickListener() {
+            row.addView(withLeftMargin(roundButton("✕", Ui.DANGER, new OnClickListener() {
                 @Override
                 public void onClick(View v) {
                     times.remove(idx);
                     rebuild();
                     notifyChanged();
                 }
-            });
+            })));
         }
-        row.addView(del);
         return row;
+    }
+
+    /** 圆形小按钮(36dp,涟漪):+ 用主色,✕ 用强调色,禁用态传灰色并传 null 监听。 */
+    private TextView roundButton(String glyph, int color, final OnClickListener click) {
+        TextView b = new TextView(ctx);
+        b.setText(glyph);
+        b.setTextSize(18);
+        b.setGravity(Gravity.CENTER);
+        b.setTextColor(color);
+        int size = Ui.dp(ctx, 36);
+        android.graphics.drawable.Drawable bg;
+        android.graphics.drawable.GradientDrawable g = Ui.rounded(Ui.tint(color, 0.10f), size / 2f, ctx);
+        if (android.os.Build.VERSION.SDK_INT >= 21 && click != null) {
+            bg = new android.graphics.drawable.RippleDrawable(
+                    android.content.res.ColorStateList.valueOf(Ui.tint(color, 0.25f)), g,
+                    Ui.rounded(0xFFFFFFFF, size / 2f, ctx));
+        } else {
+            bg = g;
+        }
+        b.setBackground(bg);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(size, size);
+        b.setLayoutParams(lp);
+        if (click != null) {
+            b.setOnClickListener(click);
+            b.setClickable(true);
+        }
+        return b;
+    }
+
+    private View withLeftMargin(View v) {
+        LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) v.getLayoutParams();
+        lp.leftMargin = Ui.dp(ctx, 8);
+        v.setLayoutParams(lp);
+        return v;
     }
 
     private String hourPart(int idx) {
@@ -178,7 +208,31 @@ public class TimeRowsEditor extends LinearLayout {
         np.setDisplayedValues(labels);
         np.setWrapSelectorWheel(true);
         np.setDescendantFocusability(FOCUS_BLOCK_DESCENDANTS); // 禁止弹出软键盘,保持滚轮交互
+        tintPicker(np);
         return np;
+    }
+
+    /**
+     * 深色模式下滚轮文字仍是系统主题的黑色,在深底上看不清;
+     * 把选中框 EditText 与滚轮画笔刷成主题文字色(个别 ROM 反射失败也不影响功能)。
+     */
+    private void tintPicker(NumberPicker np) {
+        try {
+            for (int i = 0; i < np.getChildCount(); i++) {
+                View child = np.getChildAt(i);
+                if (child instanceof android.widget.EditText) {
+                    ((android.widget.EditText) child).setTextColor(Ui.TEXT_MAIN);
+                }
+            }
+            java.lang.reflect.Field paint = NumberPicker.class.getDeclaredField("mSelectorWheelPaint");
+            paint.setAccessible(true);
+            Object p = paint.get(np);
+            if (p instanceof android.graphics.Paint) {
+                ((android.graphics.Paint) p).setColor(Ui.TEXT_MAIN);
+            }
+            np.invalidate();
+        } catch (Throwable ignored) {
+        }
     }
 
     private View spacer(int dpH) {

@@ -25,11 +25,61 @@ public class ProtocolLoginActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Ui.applyTheme(this);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(Ui.PAGE_BG);
 
-        TextView tip = new TextView(this);
-        tip.setText("v0.4.0 · 用抖音 App 扫码 / 验证码登录网页版(登录态长期保存,完成后按返回键)");
+        // 顶栏:返回 + 标题 + 完成
+        LinearLayout bar = Ui.row(this);
+        bar.setBackgroundColor(Ui.BAR_BG);
+        int bp = dp(12);
+        bar.setPadding(bp, dp(8), bp, dp(8));
+        TextView back = new TextView(this);
+        back.setText("‹");
+        back.setTextSize(28);
+        back.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        back.setTextColor(Ui.TEXT_MAIN);
+        back.setPadding(dp(6), 0, dp(14), 0);
+        back.setOnClickListener(new android.view.View.OnClickListener() {
+            @Override
+            public void onClick(android.view.View v) {
+                finish();
+            }
+        });
+        bar.addView(back);
+        TextView title = new TextView(this);
+        title.setText("网页登录");
+        title.setTextSize(18);
+        title.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        title.setTextColor(Ui.TEXT_MAIN);
+        bar.addView(title, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        TextView done = new TextView(this);
+        done.setText("完成");
+        done.setTextSize(15);
+        done.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        done.setTextColor(Ui.PRIMARY);
+        done.setPadding(dp(10), dp(4), dp(6), dp(4));
+        done.setOnClickListener(new android.view.View.OnClickListener() {
+            @Override
+            public void onClick(android.view.View v) {
+                CookieManager.getInstance().flush();
+                finish();
+            }
+        });
+        bar.addView(done);
+        root.addView(bar, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(Ui.hairline(this));
+
+        String ver = "";
+        try {
+            ver = "v" + getPackageManager().getPackageInfo(getPackageName(), 0).versionName + " · ";
+        } catch (Exception ignored) {
+        }
+        TextView tip = Ui.subtitle(this, ver
+                + "用抖音 App 扫码 / 验证码登录网页版;登录态长期保存,完成后点右上角「完成」");
         tip.setPadding(dp(12), dp(8), dp(12), dp(8));
         root.addView(tip);
 
@@ -105,7 +155,7 @@ public class ProtocolLoginActivity extends Activity {
                             @Override
                             public void run() {
                                 Toast.makeText(ProtocolLoginActivity.this,
-                                        "✅ 登录成功!Cookie 已长期保存,按返回键退出", Toast.LENGTH_LONG).show();
+                                        "✅ 登录成功!Cookie 已长期保存,点右上角「完成」退出", Toast.LENGTH_LONG).show();
                             }
                         });
                         return;

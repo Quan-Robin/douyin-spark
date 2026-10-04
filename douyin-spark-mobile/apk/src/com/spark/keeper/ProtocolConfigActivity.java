@@ -31,6 +31,7 @@ public class ProtocolConfigActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Ui.applyTheme(this); // 与主界面一致:这个页面仍可从旧入口进入,不应用主题会串色
         Ui.pageBackground(this);
         setContentView(buildUi());
         loadPrefs();

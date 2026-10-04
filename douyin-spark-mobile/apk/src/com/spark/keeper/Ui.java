@@ -3,6 +3,7 @@ package com.spark.keeper;
 import android.app.Activity;
 import android.content.Context;
 import android.content.res.ColorStateList;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
@@ -12,29 +13,103 @@ import android.os.Build;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
-/** 统一视觉:抖音红主色 + 圆角卡片 + 涟漪反馈 + 矢量图标。 */
+/**
+ * 统一视觉:抖音红主色 + 圆角卡片 + 涟漪反馈 + 矢量图标。
+ *
+ * 支持浅色 / 深色 / 跟随系统:颜色是可变静态字段,由 {@link #applyTheme(Activity)}
+ * 在每个 Activity 构建视图之前写入;切换主题后 recreate() 即整体生效。
+ */
 public final class Ui {
 
+    // ---- 品牌色(不随主题变化) ----
     public static final int PRIMARY = 0xFFFE2C55;
     public static final int PRIMARY_DARK = 0xFFD91E45;
-    public static final int PAGE_BG = 0xFFF4F5F7;
-    public static final int CARD_BG = 0xFFFFFFFF;
-    public static final int TEXT_MAIN = 0xFF1A1A1A;
-    public static final int TEXT_SUB = 0xFF8A8F99;
-    public static final int INPUT_BG = 0xFFF0F1F5;
-    public static final int DIVIDER = 0xFFEDEEF2;
     public static final int OK = 0xFF12B76A;
     public static final int WARN = 0xFFF79009;
     public static final int DANGER = 0xFFD93025;
-    public static final int RIPPLE = 0x22000000;
+
+    // ---- 随主题变化的颜色(浅色默认值;applyTheme 会改写) ----
+    public static int PAGE_BG = 0xFFF4F5F7;
+    public static int CARD_BG = 0xFFFFFFFF;
+    public static int TEXT_MAIN = 0xFF1A1A1A;
+    public static int TEXT_SUB = 0xFF8A8F99;
+    public static int TEXT_BODY = 0xFF4A4F58;
+    public static int INPUT_BG = 0xFFF0F1F5;
+    public static int DIVIDER = 0xFFEDEEF2;
+    public static int RIPPLE = 0x22000000;
+    /** 顶部栏/底部导航的底色(浅色=白,深色=卡片色)。 */
+    public static int BAR_BG = 0xFFFFFFFF;
+
+    private static boolean dark;
 
     private Ui() {
+    }
+
+    public static boolean isDark() {
+        return dark;
+    }
+
+    /**
+     * 按设置(0 跟随系统 / 1 浅色 / 2 深色)应用主题色与系统栏配色。
+     * 必须在 setContentView 之前调用;在「基本设置」里切换外观后 recreate() 生效。
+     */
+    public static void applyTheme(Activity a) {
+        int mode = new Prefs(a).darkMode();
+        boolean sysDark = (a.getResources().getConfiguration().uiMode
+                & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+        dark = mode == 2 || (mode == 0 && sysDark);
+        if (dark) {
+            PAGE_BG = 0xFF101318;
+            CARD_BG = 0xFF1B2027;
+            TEXT_MAIN = 0xFFF2F3F5;
+            TEXT_SUB = 0xFF9AA0AA;
+            TEXT_BODY = 0xFFC2C7CF;
+            INPUT_BG = 0xFF262C35;
+            DIVIDER = 0xFF2C333D;
+            RIPPLE = 0x33FFFFFF;
+            BAR_BG = CARD_BG;
+        } else {
+            PAGE_BG = 0xFFF4F5F7;
+            CARD_BG = 0xFFFFFFFF;
+            TEXT_MAIN = 0xFF1A1A1A;
+            TEXT_SUB = 0xFF8A8F99;
+            TEXT_BODY = 0xFF4A4F58;
+            INPUT_BG = 0xFFF0F1F5;
+            DIVIDER = 0xFFEDEEF2;
+            RIPPLE = 0x22000000;
+            BAR_BG = 0xFFFFFFFF;
+        }
+        // 系统栏:状态栏/导航栏跟随界面色,图标深浅与主题相反
+        Window w = a.getWindow();
+        if (Build.VERSION.SDK_INT >= 21) {
+            w.setStatusBarColor(BAR_BG);
+            w.setNavigationBarColor(BAR_BG);
+        }
+        if (Build.VERSION.SDK_INT >= 23) {
+            View decor = w.getDecorView();
+            int flags = decor.getSystemUiVisibility();
+            if (dark) {
+                flags &= ~View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+                if (Build.VERSION.SDK_INT >= 26) {
+                    flags &= ~View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                }
+            } else {
+                flags |= View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+                if (Build.VERSION.SDK_INT >= 26) {
+                    flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+                }
+            }
+            decor.setSystemUiVisibility(flags);
+        }
+        pageBackground(a);
     }
 
     public static float dens(Context c) {
@@ -102,7 +177,7 @@ public final class Ui {
         TextView t = new TextView(c);
         t.setText(text);
         t.setTextSize(13);
-        t.setTextColor(0xFF4A4F58);
+        t.setTextColor(TEXT_BODY);
         t.setLineSpacing(dp(c, 4), 1f);
         return t;
     }
@@ -130,7 +205,7 @@ public final class Ui {
         t.setText(text);
         t.setTextSize(13.5f);
         t.setTypeface(Typeface.DEFAULT_BOLD);
-        t.setTextColor(0xFF5A6070);
+        t.setTextColor(TEXT_BODY);
         row.addView(t);
         return row;
     }
@@ -199,7 +274,7 @@ public final class Ui {
         int p = dp(c, 14);
         card.setPadding(p, p, p, p);
         if (Build.VERSION.SDK_INT >= 21) {
-            card.setElevation(dp(c, 1));
+            card.setElevation(dark ? 0 : dp(c, 1));
         }
         return card;
     }
@@ -214,7 +289,7 @@ public final class Ui {
         int p = dp(c, 14);
         card.setPadding(p, p, p, p);
         if (Build.VERSION.SDK_INT >= 21) {
-            card.setElevation(dp(c, 1));
+            card.setElevation(dark ? 0 : dp(c, 1));
         }
         return card;
     }
@@ -259,9 +334,18 @@ public final class Ui {
             box.setClickable(true);
         }
         if (Build.VERSION.SDK_INT >= 21) {
-            box.setElevation(dp(c, 1));
+            box.setElevation(dark ? 0 : dp(c, 1));
         }
         return box;
+    }
+
+    /** 1dp 横线(无外边距版,供顶栏/底栏分隔用)。 */
+    public static View hairline(Context c) {
+        View v = new View(c);
+        v.setBackgroundColor(DIVIDER);
+        v.setLayoutParams(new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, dp(c, 1))));
+        return v;
     }
 
     public static View divider(Context c) {
@@ -295,10 +379,31 @@ public final class Ui {
         return ed;
     }
 
+    /** 统一样式的复选框:主色勾选、更大文字与触控区域。 */
+    public static CheckBox check(Context c, String text) {
+        CheckBox cb = new CheckBox(c);
+        cb.setText(text);
+        cb.setTextSize(14);
+        cb.setTextColor(TEXT_BODY);
+        cb.setLineSpacing(dp(c, 2), 1f);
+        cb.setPadding(dp(c, 4), dp(c, 6), dp(c, 4), dp(c, 6));
+        if (Build.VERSION.SDK_INT >= 21) {
+            cb.setButtonTintList(ColorStateList.valueOf(PRIMARY));
+        }
+        return cb;
+    }
+
     private static void flat(Button b) {
         if (Build.VERSION.SDK_INT >= 21) {
             b.setStateListAnimator(null);
         }
+    }
+
+    /** 触控目标至少 48dp,文字不被裁剪。 */
+    private static void touchable(Button b) {
+        b.setMinHeight(dp(b.getContext(), 48));
+        b.setMinimumHeight(dp(b.getContext(), 48));
+        b.setIncludeFontPadding(true);
     }
 
     public static Button primary(Context c, String text) {
@@ -310,8 +415,9 @@ public final class Ui {
         b.setBackground(clickable(PRIMARY, 14, c));
         b.setAllCaps(false);
         int p = dp(c, 8);
-        b.setPadding(0, p, 0, p);
+        b.setPadding(dp(c, 12), p, dp(c, 12), p);
         flat(b);
+        touchable(b);
         return b;
     }
 
@@ -321,7 +427,7 @@ public final class Ui {
         b.setTextColor(PRIMARY);
         b.setTextSize(14);
         b.setTypeface(Typeface.DEFAULT_BOLD);
-        GradientDrawable g = stroked(Color.WHITE, PRIMARY, 1.2f, 14, c);
+        GradientDrawable g = stroked(CARD_BG, PRIMARY, 1.2f, 14, c);
         Drawable bg = g;
         if (Build.VERSION.SDK_INT >= 21) {
             bg = new RippleDrawable(ColorStateList.valueOf(tint(PRIMARY, 0.12f)), g,
@@ -330,8 +436,9 @@ public final class Ui {
         b.setBackground(bg);
         b.setAllCaps(false);
         int p = dp(c, 8);
-        b.setPadding(0, p, 0, p);
+        b.setPadding(dp(c, 12), p, dp(c, 12), p);
         flat(b);
+        touchable(b);
         return b;
     }
 
@@ -341,7 +448,7 @@ public final class Ui {
         b.setTextColor(DANGER);
         b.setTextSize(14);
         b.setTypeface(Typeface.DEFAULT_BOLD);
-        GradientDrawable g = stroked(Color.WHITE, DANGER, 1.2f, 14, c);
+        GradientDrawable g = stroked(CARD_BG, DANGER, 1.2f, 14, c);
         Drawable bg = g;
         if (Build.VERSION.SDK_INT >= 21) {
             bg = new RippleDrawable(ColorStateList.valueOf(tint(DANGER, 0.12f)), g,
@@ -350,8 +457,9 @@ public final class Ui {
         b.setBackground(bg);
         b.setAllCaps(false);
         int p = dp(c, 8);
-        b.setPadding(0, p, 0, p);
+        b.setPadding(dp(c, 12), p, dp(c, 12), p);
         flat(b);
+        touchable(b);
         return b;
     }
 

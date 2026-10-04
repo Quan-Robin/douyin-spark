@@ -6,8 +6,11 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
 
+import java.text.SimpleDateFormat;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.Random;
 
 /** 多时间点闹钟调度:每个发送窗口一个槽位;槽位的实际注册时间持久化,杜绝虚构时间。 */
@@ -47,8 +50,15 @@ public class Scheduler {
             am.cancel(pending(ctx, i));
         }
         long earliest = Long.MAX_VALUE;
+        String today = dayString();
         for (int i = 0; i < n; i++) {
-            long at = nextTime(times.get(i), p.jitterMin());
+            String hhmm = times.get(i);
+            // 这个槽今天已经触发过(且配置时间没被改过)就只能排到明天:
+            // 否则"发过一次之后再改任何设置"会把它重新排回今天。
+            boolean firedToday = today.equals(Prefs.getSlotFiredDay(ctx, i))
+                    && hhmm.equals(Prefs.getSlotFiredHhmm(ctx, i));
+            long at = firedToday ? nextTimeFromTomorrow(hhmm, p.jitterMin())
+                                 : nextTime(hhmm, p.jitterMin());
             setAlarm(ctx, am, i, at);
             Prefs.setSlotTime(ctx, i, at);
             if (at < earliest) {
@@ -75,6 +85,11 @@ public class Scheduler {
         int n = Math.min(times.size(), MAX_SLOTS);
         long now = System.currentTimeMillis();
         long earliest = Long.MAX_VALUE;
+        // 记下"这个槽今天已经触发过":之后任何设置变更触发的 rescheduleAll
+        // 都会据此把它排到明天,而不是重新排回今天。
+        if (slot < n) {
+            Prefs.setSlotFired(ctx, slot, dayString(), times.get(slot));
+        }
         // 其他槽位使用持久化的实际注册时间(不虚构、不重新抖动)
         for (int i = 0; i < n; i++) {
             if (i == slot) {
@@ -173,6 +188,11 @@ public class Scheduler {
         cal.set(Calendar.SECOND, 0);
         cal.set(Calendar.MILLISECOND, 0);
         return cal;
+    }
+
+    /** 今天的日期串(本地时区),用于判断"某槽今天是否已触发"。 */
+    private static String dayString() {
+        return new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date());
     }
 
     /** 抖动夹取到 0..MAX_JITTER_MIN。 */

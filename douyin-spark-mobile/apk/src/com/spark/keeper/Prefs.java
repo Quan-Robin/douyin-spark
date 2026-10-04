@@ -348,6 +348,28 @@ public class Prefs {
                 .getLong("slot_" + slot, 0L);
     }
 
+    // ---- 槽位"今天已触发过"记录(Scheduler.rescheduleAll 专用) ----
+    // 没有它的话,任何设置变更(自 v0.3.5 起是输入即存)都会调用 rescheduleAll,
+    // 而它按"今天还没到就排今天"的老规则算,会把刚发过的槽重新排回今天 ——
+    // 表现为首页「下次运行」变回已经发过的那一次,并且当天可能再发一遍。
+
+    public static void setSlotFired(Context ctx, int slot, String day, String hhmm) {
+        ctx.getSharedPreferences("spark", Context.MODE_PRIVATE).edit()
+                .putString("slot_fired_day_" + slot, day == null ? "" : day)
+                .putString("slot_fired_hhmm_" + slot, hhmm == null ? "" : hhmm)
+                .apply();
+    }
+
+    public static String getSlotFiredDay(Context ctx, int slot) {
+        return ctx.getSharedPreferences("spark", Context.MODE_PRIVATE)
+                .getString("slot_fired_day_" + slot, "");
+    }
+
+    public static String getSlotFiredHhmm(Context ctx, int slot) {
+        return ctx.getSharedPreferences("spark", Context.MODE_PRIVATE)
+                .getString("slot_fired_hhmm_" + slot, "");
+    }
+
     // ---- 通用:自动检查更新 ----
     public boolean autoCheckUpdate() {
         return sp.getBoolean("autoCheckUpdate", true);

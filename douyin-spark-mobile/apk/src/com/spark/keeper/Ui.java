@@ -37,13 +37,13 @@ public final class Ui {
     public static final int DANGER = 0xFFD93025;
 
     // ---- 随主题变化的颜色(浅色默认值;applyTheme 会改写) ----
-    public static int PAGE_BG = 0xFFF4F5F7;
+    public static int PAGE_BG = 0xFFF6F7F9;
     public static int CARD_BG = 0xFFFFFFFF;
     public static int TEXT_MAIN = 0xFF1A1A1A;
     public static int TEXT_SUB = 0xFF8A8F99;
     public static int TEXT_BODY = 0xFF4A4F58;
     public static int INPUT_BG = 0xFFF0F1F5;
-    public static int DIVIDER = 0xFFEDEEF2;
+    public static int DIVIDER = 0xFFE8EAEF;
     public static int RIPPLE = 0x22000000;
     /** 顶部栏/底部导航的底色(浅色=白,深色=卡片色)。 */
     public static int BAR_BG = 0xFFFFFFFF;
@@ -67,23 +67,23 @@ public final class Ui {
                 & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
         dark = mode == 2 || (mode == 0 && sysDark);
         if (dark) {
-            PAGE_BG = 0xFF101318;
-            CARD_BG = 0xFF1B2027;
+            PAGE_BG = 0xFF0E1116;
+            CARD_BG = 0xFF191E26;
             TEXT_MAIN = 0xFFF2F3F5;
             TEXT_SUB = 0xFF9AA0AA;
             TEXT_BODY = 0xFFC2C7CF;
-            INPUT_BG = 0xFF262C35;
-            DIVIDER = 0xFF2C333D;
+            INPUT_BG = 0xFF232A33;
+            DIVIDER = 0xFF2A323C;
             RIPPLE = 0x33FFFFFF;
             BAR_BG = CARD_BG;
         } else {
-            PAGE_BG = 0xFFF4F5F7;
+            PAGE_BG = 0xFFF6F7F9;
             CARD_BG = 0xFFFFFFFF;
             TEXT_MAIN = 0xFF1A1A1A;
             TEXT_SUB = 0xFF8A8F99;
             TEXT_BODY = 0xFF4A4F58;
             INPUT_BG = 0xFFF0F1F5;
-            DIVIDER = 0xFFEDEEF2;
+            DIVIDER = 0xFFE8EAEF;
             RIPPLE = 0x22000000;
             BAR_BG = 0xFFFFFFFF;
         }
@@ -190,12 +190,12 @@ public final class Ui {
         return t;
     }
 
-    /** 小节标题:左侧主色小竖条 + 文字。 */
+    /** 小节标题:左侧主色小竖条 + 小号加宽字距文字(M3 分组标题风格)。 */
     public static LinearLayout section(Context c, String text) {
         LinearLayout row = new LinearLayout(c);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, dp(c, 14), 0, dp(c, 8));
+        row.setPadding(0, dp(c, 16), 0, dp(c, 8));
         View bar = new View(c);
         LinearLayout.LayoutParams blp = new LinearLayout.LayoutParams(dp(c, 3), dp(c, 13));
         blp.rightMargin = dp(c, 7);
@@ -203,22 +203,25 @@ public final class Ui {
         row.addView(bar, blp);
         TextView t = new TextView(c);
         t.setText(text);
-        t.setTextSize(13.5f);
+        t.setTextSize(12.5f);
         t.setTypeface(Typeface.DEFAULT_BOLD);
-        t.setTextColor(TEXT_BODY);
+        if (Build.VERSION.SDK_INT >= 21) {
+            t.setLetterSpacing(0.04f);
+        }
+        t.setTextColor(TEXT_SUB);
         row.addView(t);
         return row;
     }
 
-    /** 状态徽章(小圆角药丸)。 */
+    /** 状态徽章(全圆角药丸)。 */
     public static TextView chip(Context c, String text, int bg, int fg) {
         TextView t = new TextView(c);
         t.setText(text);
         t.setTextSize(11);
         t.setTypeface(Typeface.DEFAULT_BOLD);
         t.setTextColor(fg);
-        t.setBackground(rounded(bg, 9, c));
-        t.setPadding(dp(c, 8), dp(c, 3), dp(c, 8), dp(c, 3));
+        t.setBackground(rounded(bg, 50, c));
+        t.setPadding(dp(c, 9), dp(c, 3), dp(c, 9), dp(c, 3));
         return t;
     }
 
@@ -270,11 +273,11 @@ public final class Ui {
     public static LinearLayout card(Context c) {
         LinearLayout card = new LinearLayout(c);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(stroked(CARD_BG, DIVIDER, 1, 16, c));
-        int p = dp(c, 14);
+        card.setBackground(rounded(CARD_BG, 18, c));
+        int p = dp(c, 16);
         card.setPadding(p, p, p, p);
         if (Build.VERSION.SDK_INT >= 21) {
-            card.setElevation(dark ? 0 : dp(c, 1));
+            card.setElevation(dark ? 0 : 1.5f * dens(c));
         }
         return card;
     }
@@ -283,13 +286,13 @@ public final class Ui {
     public static LinearLayout clickableCard(Context c) {
         LinearLayout card = new LinearLayout(c);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setBackground(clickable(CARD_BG, 16, c));
+        card.setBackground(clickable(CARD_BG, 18, c));
         card.setClickable(true);
         card.setFocusable(true);
-        int p = dp(c, 14);
+        int p = dp(c, 16);
         card.setPadding(p, p, p, p);
         if (Build.VERSION.SDK_INT >= 21) {
-            card.setElevation(dark ? 0 : dp(c, 1));
+            card.setElevation(dark ? 0 : 1.5f * dens(c));
         }
         return card;
     }
@@ -300,8 +303,8 @@ public final class Ui {
                                         View.OnClickListener onClick) {
         LinearLayout box = new LinearLayout(c);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setBackground(clickable(CARD_BG, 14, c));
-        int p = dp(c, 12);
+        box.setBackground(clickable(CARD_BG, 16, c));
+        int p = dp(c, 14);
         box.setPadding(p, p, p, p);
 
         LinearLayout top = row(c);
@@ -373,9 +376,10 @@ public final class Ui {
         ed.setTextSize(14);
         ed.setTextColor(TEXT_MAIN);
         ed.setHintTextColor(TEXT_SUB);
-        ed.setBackground(rounded(INPUT_BG, 12, c));
+        ed.setBackground(rounded(INPUT_BG, 14, c));
+        ed.setMinHeight(dp(c, 48));
         int p = dp(c, 12);
-        ed.setPadding(p, p, p, p);
+        ed.setPadding(dp(c, 14), p, dp(c, 14), p);
         return ed;
     }
 
@@ -412,7 +416,10 @@ public final class Ui {
         b.setTextColor(Color.WHITE);
         b.setTextSize(15);
         b.setTypeface(Typeface.DEFAULT_BOLD);
-        b.setBackground(clickable(PRIMARY, 14, c));
+        if (Build.VERSION.SDK_INT >= 21) {
+            b.setLetterSpacing(0.02f);
+        }
+        b.setBackground(clickable(PRIMARY, 16, c));
         b.setAllCaps(false);
         int p = dp(c, 8);
         b.setPadding(dp(c, 12), p, dp(c, 12), p);
@@ -427,11 +434,11 @@ public final class Ui {
         b.setTextColor(PRIMARY);
         b.setTextSize(14);
         b.setTypeface(Typeface.DEFAULT_BOLD);
-        GradientDrawable g = stroked(CARD_BG, PRIMARY, 1.2f, 14, c);
+        GradientDrawable g = stroked(CARD_BG, PRIMARY, 1.2f, 16, c);
         Drawable bg = g;
         if (Build.VERSION.SDK_INT >= 21) {
             bg = new RippleDrawable(ColorStateList.valueOf(tint(PRIMARY, 0.12f)), g,
-                    rounded(Color.WHITE, 14, c));
+                    rounded(Color.WHITE, 16, c));
         }
         b.setBackground(bg);
         b.setAllCaps(false);
@@ -448,11 +455,11 @@ public final class Ui {
         b.setTextColor(DANGER);
         b.setTextSize(14);
         b.setTypeface(Typeface.DEFAULT_BOLD);
-        GradientDrawable g = stroked(CARD_BG, DANGER, 1.2f, 14, c);
+        GradientDrawable g = stroked(CARD_BG, DANGER, 1.2f, 16, c);
         Drawable bg = g;
         if (Build.VERSION.SDK_INT >= 21) {
             bg = new RippleDrawable(ColorStateList.valueOf(tint(DANGER, 0.12f)), g,
-                    rounded(Color.WHITE, 14, c));
+                    rounded(Color.WHITE, 16, c));
         }
         b.setBackground(bg);
         b.setAllCaps(false);

@@ -400,12 +400,12 @@ public class SparkService extends AccessibilityService {
     /** 实验性:Root 解锁。自动尝试 4 种手势进入 PIN 页,每种后尝试输入;全程截图存证。 */
     public boolean tryRootUnlock(String pin) {
         try {
-            String idOut = execSuOut("id");
-            if (idOut == null || !idOut.contains("uid=0")) {
-                log("Root 解锁前置检查失败(su 未授权或无 root): " + idOut);
+            if (!rootUsable() && !ShizukuShell.granted()) {
+                log("没有可用的提权通道(root 与 Shizuku 都不可用),跳过特权解锁");
                 return false;
             }
-            log("su 可用,开始解锁流程");
+            log("开始特权解锁流程(通道: root=" + rootUsable()
+                    + ", shizuku=" + ShizukuShell.granted() + ")");
             // 杀手锏:root 直接禁用锁屏 + 系统级驱散 keyguard(无需 PIN/手势)
             execSu("settings put secure lockscreen.disabled 1");
             lockscreenDisabledByUs = true;
@@ -546,6 +546,14 @@ public class SparkService extends AccessibilityService {
      * (前台通知不会消失、RunnerService 计数不归零)。
      */
     private String execSuOut(String cmd) {
+        // 顺序很重要:先 root 再 Shizuku。反过来的话,检查 root 的 "id" 会拿到 shell 的
+        // uid=2000,让根路径误判为"没有 root"。
+        if (!rootUsable()) {
+            String viaShizuku = shizukuOut(cmd);
+            if (viaShizuku != null) {
+                return viaShizuku;
+            }
+        }
         Process pr = null;
         try {
             ProcessBuilder pb = new ProcessBuilder("su", "-c", cmd);
@@ -590,6 +598,63 @@ public class SparkService extends AccessibilityService {
         }
     }
 
+    /** su 缓存:null=还没测过。避免每条命令都触发一次 Magisk 授权框。 */
+    private Boolean rootCache;
+
+    /**
+     * su 是否真的可用。用一次 {@code su -c id} 判断并缓存结果:
+     * 注意这是**唯一**判断根路径的地方,其它地方一律用它,避免重复弹授权框。
+     */
+    private boolean rootUsable() {
+        if (rootCache != null) {
+            return rootCache;
+        }
+        Process pr = null;
+        boolean ok = false;
+        try {
+            ProcessBuilder pb = new ProcessBuilder("su", "-c", "id");
+            pb.redirectErrorStream(true);
+            pr = pb.start();
+            final StringBuilder sb = new StringBuilder();
+            final java.io.InputStream in = pr.getInputStream();
+            Thread reader = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        java.io.BufferedReader br = new java.io.BufferedReader(
+                                new java.io.InputStreamReader(in, "UTF-8"));
+                        String line;
+                        while ((line = br.readLine()) != null && sb.length() < 500) {
+                            sb.append(line);
+                        }
+                        br.close();
+                    } catch (Exception ignored) {
+                    }
+                }
+            });
+            reader.setDaemon(true);
+            reader.start();
+            if (awaitProcess(pr, 8000)) {
+                reader.join(800);
+                ok = sb.toString().contains("uid=0");
+            } else {
+                log("检测 su 超时(可能授权框没响应),按无 root 处理");
+            }
+        } catch (Exception e) {
+            ok = false;
+        } finally {
+            if (pr != null) {
+                try {
+                    pr.destroy();
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        rootCache = ok;
+        log("提权通道检测: root=" + ok + ", shizuku=" + (ShizukuShell.granted() ? "已授权" : "不可用"));
+        return ok;
+    }
+
     /** 等待子进程结束(带超时);超时则杀掉并返回 false。API 24/25 没有带超时的 waitFor。 */
     private static boolean awaitProcess(Process pr, long timeoutMs) {
         long deadline = System.currentTimeMillis() + timeoutMs;
@@ -613,8 +678,32 @@ public class SparkService extends AccessibilityService {
         return false;
     }
 
-    /** 执行 root 命令(不需要输出)。返回码非 0 时写日志,不再"假装成功"。 */
+    /**
+     * Shizuku 通道执行命令;通道不可用返回 null(调用方继续走 root)。
+     * 这是未公开的内部 AIDL,Shizuku 升级后可能失效 —— 失败一律返回 null 并写日志,不抛异常。
+     */
+    private String shizukuOut(String cmd) {
+        if (!ShizukuShell.granted()) {
+            return null;
+        }
+        Object[] r = ShizukuShell.run(cmd, 15000);
+        if (r == null) {
+            log("[shizuku] 执行失败(内部接口不可用?): " + cmd);
+            return null;
+        }
+        String out = String.valueOf(r[1]);
+        log("[shizuku] " + cmd + " → exit=" + r[0] + (out.isEmpty() ? "" : " " + out.trim()));
+        return out;
+    }
+
+    /** 执行特权命令(优先 root,其次 Shizuku)。返回码非 0 时写日志,不再"假装成功"。 */
     private void execSu(String cmd) throws Exception {
+        if (!rootUsable()) {
+            String viaShizuku = shizukuOut(cmd);
+            if (viaShizuku != null) {
+                return;
+            }
+        }
         Process pr = null;
         try {
             ProcessBuilder pb = new ProcessBuilder("su", "-c", cmd);

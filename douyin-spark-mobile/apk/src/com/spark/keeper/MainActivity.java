@@ -117,6 +117,25 @@ public class MainActivity extends Activity {
         if (new Prefs(this).autoCheckUpdate()) {
             checkUpdate(false);
         }
+        // Shizuku 授权结果回调(未安装 Shizuku 时这里会抛异常,忽略即可)
+        try {
+            rikka.shizuku.Shizuku.addRequestPermissionResultListener(
+                    new rikka.shizuku.Shizuku.OnRequestPermissionResultListener() {
+                        @Override
+                        public void onRequestPermissionResult(int requestCode, int grantResult) {
+                            boolean ok = grantResult
+                                    == android.content.pm.PackageManager.PERMISSION_GRANTED;
+                            Toast.makeText(MainActivity.this,
+                                    ok ? "Shizuku 授权成功,现在可以用 shell 身份执行命令"
+                                       : "Shizuku 授权被拒绝",
+                                    Toast.LENGTH_LONG).show();
+                            if (tvRootStatus != null) {
+                                tvRootStatus.setText(probeRoot());
+                            }
+                        }
+                    });
+        } catch (Throwable ignored) {
+        }
         showPage(PG_HOME);
         // 首次使用:直接进引导(模式选择 + 按厂商的权限清单)
         if (!new Prefs(this).onboarded()) {
@@ -807,7 +826,7 @@ public class MainActivity extends Activity {
             }
         });
         root.addView(Ui.spacer(this, 8));
-        Button btnRootCheck = Ui.secondary(this, "检测 Root 可用性");
+        Button btnRootCheck = Ui.secondary(this, "检测提权通道(Root / Shizuku)");
         btnRootCheck.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -815,6 +834,29 @@ public class MainActivity extends Activity {
             }
         });
         cardR.addView(btnRootCheck, lpFull());
+        // Shizuku 需要单独授权:装好并启动 Shizuku 后点这里申请
+        Button btnShizuku = Ui.secondary(this, "请求 Shizuku 授权(装好 Shizuku 再点)");
+        btnShizuku.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (!ShizukuShell.installed(MainActivity.this)) {
+                    Toast.makeText(MainActivity.this,
+                            "没检测到 Shizuku。请先安装并启动 Shizuku(包名 moe.shizuku.manager),再回来点这里。",
+                            Toast.LENGTH_LONG).show();
+                    return;
+                }
+                if (!ShizukuShell.available()) {
+                    Toast.makeText(MainActivity.this,
+                            "Shizuku 已安装但服务没在运行:打开 Shizuku App 启动它(重启手机后需要重新启动)。",
+                            Toast.LENGTH_LONG).show();
+                    return;
+                }
+                ShizukuShell.requestPermission();
+                Toast.makeText(MainActivity.this, "已发送授权请求,请在弹窗里点「允许」",
+                        Toast.LENGTH_SHORT).show();
+            }
+        });
+        cardR.addView(btnShizuku, lpFull());
         // 结果常驻显示:以前只弹 Toast,超时或没反应时用户什么都看不到
         tvRootStatus = Ui.label(this, "尚未检测(不影响不使用 Root 的用户)");
         tvRootStatus.setPadding(0, Ui.dp(this, 8), 0, 0);
@@ -911,7 +953,9 @@ public class MainActivity extends Activity {
     }
 
     /** 分层检测:找不到 su / 超时未响应 / 已授权 / 有 su 但被拒。任何情况都有明确文案。 */
-    private static String probeRoot() {
+    private String probeRoot() {
+        String shizukuLine = "Shizuku: " + ShizukuShell.statusText(this);
+        String rootLine;
         boolean hasSuFile = false;
         String[] paths = {"/system/bin/su", "/system/xbin/su", "/sbin/su", "/su/bin/su",
                 "/magisk/.core/bin/su", "/debug_ramdisk/su"};
@@ -927,25 +971,32 @@ public class MainActivity extends Activity {
         Object[] which = runCmd(new String[]{"sh", "-c", "which su || command -v su"}, 4000);
         String whichOut = String.valueOf(which[0]).trim();
         if (!hasSuFile && whichOut.isEmpty()) {
-            return "❌ 未找到 su 命令:设备没有 Root,或 Root 管理工具未安装。\n"
-                    + "不使用 Root 解锁的用户可以忽略这一项。";
+            rootLine = "Root: ❌ 未找到 su(设备没有 Root,或 Root 管理工具未安装)";
+        } else {
+            Object[] r = runCmd(new String[]{"su", "-c", "id"}, 15000);
+            String out = String.valueOf(r[0]).trim();
+            boolean timedOut = Boolean.TRUE.equals(r[1]);
+            String execErr = String.valueOf(r[2]);
+            if (!execErr.isEmpty() && out.isEmpty()) {
+                rootLine = "Root: ❌ 无法执行 su(" + execErr + ")";
+            } else if (timedOut) {
+                rootLine = "Root: ❌ 超时(授权请求没响应,请去 Magisk 里允许本应用)";
+            } else if (out.contains("uid=0")) {
+                rootLine = "Root: ✅ 可用(" + out.replace('\n', ' ') + ")";
+            } else {
+                rootLine = "Root: ❌ 有 su 但没拿到权限"
+                        + (out.isEmpty() ? "(授权被拒绝)" : "(" + out.replace('\n', ' ') + ")");
+            }
         }
-        Object[] r = runCmd(new String[]{"su", "-c", "id"}, 15000);
-        String out = String.valueOf(r[0]).trim();
-        boolean timedOut = Boolean.TRUE.equals(r[1]);
-        String execErr = String.valueOf(r[2]);
-        if (!execErr.isEmpty() && out.isEmpty()) {
-            return "❌ 无法执行 su:" + execErr + "\n(已找到 su 文件,但当前应用无权执行)";
+        String channel;
+        if (rootLine.contains("✅")) {
+            channel = "当前解锁通道:Root";
+        } else if (ShizukuShell.granted()) {
+            channel = "当前解锁通道:Shizuku(shell 身份执行命令)";
+        } else {
+            channel = "当前没有提权通道 —— 解锁会走「无障碍点键盘输 PIN」,再不行就等你解锁后补跑";
         }
-        if (timedOut) {
-            return "❌ 超时:Root 授权请求没有得到响应。\n"
-                    + "请打开 Magisk / Root 管理,把本应用的授权改为「允许」后重新检测。";
-        }
-        if (out.contains("uid=0")) {
-            return "✅ Root 可用:" + out.replace('\n', ' ');
-        }
-        return "❌ su 存在但没有拿到 root 权限"
-                + (out.isEmpty() ? "(没有任何输出,通常是授权被拒绝)" : ":\n" + out);
+        return rootLine + "\n" + shizukuLine + "\n" + channel;
     }
 
     /**

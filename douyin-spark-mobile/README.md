@@ -8,7 +8,7 @@
 - ✅ **独立 APK**(原生实现,无需安装 AutoX.js):`SparkKeeper.apk`
 - ⚠️ 仅支持 **Android**(iOS 系统不允许第三方 App 自动操作其他 App,无解决方案)
 - ⚠️ 发送消息本身需要网络;"离线"指不依赖电脑常开,不是断网发消息
-- 📌 当前版本 **v0.4.0**:**设了密码锁也能免 root 自动解锁**(无障碍直接点锁屏键盘输 PIN),另附两个零成本替代方案,详见文末「v0.4.0」
+- 📌 当前版本 **v0.4.1**:新增 **Shizuku 通道**(没有 root 也能用 shell 身份解锁),叠加无障碍输 PIN 与零成本替代方案,详见文末「v0.4.1」
 
 ## 方式一:安装独立 APK(推荐,已构建好)
 
@@ -241,6 +241,36 @@ bash build.sh
 
 脚本会同时生成圆角方形(`ic_launcher.png`)和圆形(`ic_launcher_round.png`)两套,覆盖 mdpi~xxxhdpi 五个密度。
 如果出图自带完整方形背景(没有圆角),直接把整张图丢进去也行,启动器的圆角/圆形遮罩会自己处理。
+
+## v0.4.1
+
+**🔓 新增 Shizuku 通道:没有 root 也能用 shell 身份执行命令**
+
+root 之外多了一条真正的"特权通道"。命令字符串与 root 完全一样,只换执行身份:
+
+| 通道 | 身份 | 条件 |
+|---|---|---|
+| Root | uid 0 | 设备已 root 且授权 |
+| **Shizuku** | **shell(uid 2000)** | 装了 Shizuku 并授权本应用 |
+| 无障碍输 PIN | 无障碍服务 | 填了 PIN 即可(ROM 差异大) |
+| 等你解锁后补跑 | — | 兜底 |
+
+有了 shell 身份,`settings put secure lockscreen.disabled 1` / `wm dismiss-keyguard` /
+`input text <PIN>` 这些就能照跑 —— 等于把 root 那套"杀手锏"复制了一份。
+
+**怎么用**
+
+1. 自行安装 **Shizuku**(包名 `moe.shizuku.manager`)并启动它(Android 11+ 可用无线调试免电脑);
+2. 打开本应用 → 基本设置 → 点「**请求 Shizuku 授权**」→ 弹窗里允许;
+3. 点「**检测提权通道(Root / Shizuku)**」应显示 `Shizuku: 已授权(v13),可以执行命令`。
+
+> ⚠️ **两个必须知道的代价**
+> ① 这是 Shizuku **未公开的内部 AIDL**(`dev.rikka.shizuku:aidl` 里有编译好的 stub),
+>    Shizuku 升级若改动事务号就会失效 —— 所以失败会**写日志并自动回落到无障碍通道**,不会卡死;
+> ② Shizuku **重启手机后需要重新启动**(非 root 设备的通病),那之后到重新启动前,这条通道不可用。
+
+**体积**:引入三个官方 jar(`shizuku-api` / `shizuku-provider` / `shizuku-aidl`,共 56KB,Apache-2.0),
+APK 从 104KB 增至 121KB。
 
 ## v0.4.0
 

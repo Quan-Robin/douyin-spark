@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.spark.keeper"
-    android:versionCode="18"
-    android:versionName="0.4.0">
+    android:versionCode="19"
+    android:versionName="0.4.1">
 
     <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="30"/>
 
@@ -23,6 +23,8 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <!-- Android 13+ 运行结果通知 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Shizuku:以 shell 身份执行命令所需的权限(装并授权 Shizuku 后才生效) -->
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V23"/>
 
     <!-- Android 11+ 包可见性:不声明就既查不到抖音的启动 Intent,
          也无法跳转到各厂商"安全中心/自启动管理"页面 -->
@@ -102,6 +104,14 @@
             android:name=".OnboardingActivity"
             android:exported="false"
             android:label="首次使用引导"/>
+
+        <!-- Shizuku API 要求声明的 Provider:它负责把 Shizuku 服务的 binder 传进来 -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="com.spark.keeper.shizuku"
+            android:enabled="true"
+            android:exported="true"
+            android:multiprocess="false"/>
 
         <activity android:name=".AccessibilityConfigActivity" android:exported="false"/>
         <activity android:name=".ProtocolConfigActivity" android:exported="false"/>

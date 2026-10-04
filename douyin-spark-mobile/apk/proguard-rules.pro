@@ -15,3 +15,9 @@
 -keepclassmembers class * { @android.webkit.JavascriptInterface <methods>; }
 # 资源 R 类字段
 -keep class **.R$* { *; }
+
+# Shizuku:provider 由系统实例化,api 与内部 AIDL 之间靠 binder/反射,必须整体保留
+-keep class rikka.shizuku.** { *; }
+-keep class moe.shizuku.** { *; }
+-dontwarn rikka.shizuku.**
+-dontwarn moe.shizuku.**

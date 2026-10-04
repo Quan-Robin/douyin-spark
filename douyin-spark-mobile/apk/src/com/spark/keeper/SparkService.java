@@ -282,13 +282,21 @@ public class SparkService extends AccessibilityService {
             autoUnlocked = true;
             return true;
         }
-        log("检测到密码/指纹锁屏(不能越过安全锁),等待你下次解锁后自动继续,最长 "
+        log("检测到密码/指纹锁屏:先试免 root 的自动输密码,不行就等你解锁后补跑,最长 "
                 + p.waitUnlockMin() + " 分钟");
         // 实验性:有 Root 时可直接输入 PIN 解锁(仅 PIN/数字密码有效,指纹/人脸无法模拟)
         if (p.rootUnlock() && p.rootPin().isEmpty()) {
             log("已勾选 Root 解锁但未填写 PIN(配置区 ⑤),跳过 Root 解锁");
         } else if (p.rootUnlock() && !p.rootPin().isEmpty() && tryRootUnlock(p.rootPin())) {
             log("已通过 Root 输入 PIN 解锁");
+            wakeScreen();
+            autoUnlocked = true;
+            return true;
+        }
+        // 免 root 通道:没勾 Root(或 Root 不可用)时,用无障碍直接点锁屏键盘输 PIN。
+        // 这是"设了密码又不想 root"的主要解法,失败就落回下面的等待解锁。
+        if (isLocked() && !p.rootPin().isEmpty() && tryA11yUnlock(p.rootPin())) {
+            log("已通过无障碍输入 PIN 解锁(免 root)");
             wakeScreen();
             autoUnlocked = true;
             return true;
@@ -304,6 +312,89 @@ public class SparkService extends AccessibilityService {
             }
         }
         return false;
+    }
+
+    /**
+     * 免 root 方案:用无障碍服务在锁屏上点数字键盘输入 PIN。
+     *
+     * 锁屏的 PIN 键盘对无障碍服务而言通常就是普通可点节点(文本/内容描述为 0-9 与"确认"),
+     * 逐个 ACTION_CLICK 即可;部分 ROM 会把锁屏内容从无障碍树里摘掉,这时会直接失败,
+     * 调用方回落到"等你解锁后补跑"。指纹/人脸无法模拟,只对 PIN/数字密码有效。
+     */
+    public boolean tryA11yUnlock(String pin) {
+        if (pin == null || pin.isEmpty()) {
+            log("未填写锁屏 PIN,跳过无障碍输密码");
+            return false;
+        }
+        log("尝试用无障碍服务输入锁屏 PIN(免 root)");
+        for (int attempt = 1; attempt <= 2 && isLocked() && !ABORT; attempt++) {
+            wakeScreen();
+            sleep(900);
+            boolean allFound = true;
+            for (int i = 0; i < pin.length() && !ABORT; i++) {
+                final String d = String.valueOf(pin.charAt(i));
+                AccessibilityNodeInfo key = findFirst(new NodeTest() {
+                    @Override
+                    public boolean test(AccessibilityNodeInfo n) {
+                        if (!visible(n)) {
+                            return false;
+                        }
+                        for (String part : txt(n).split("\\|")) {
+                            if (part.trim().equals(d)) {
+                                return true;
+                            }
+                        }
+                        return false;
+                    }
+                });
+                if (key == null) {
+                    allFound = false;
+                    break;
+                }
+                tapNode(key);
+                sleep(260);
+            }
+            if (!allFound) {
+                log("锁屏键盘上找不到对应数字(该 ROM 可能不允许无障碍访问锁屏)");
+                return false;
+            }
+            AccessibilityNodeInfo ok = findFirst(new NodeTest() {
+                @Override
+                public boolean test(AccessibilityNodeInfo n) {
+                    if (!visible(n)) {
+                        return false;
+                    }
+                    String t = txt(n);
+                    return t.contains("确认") || t.contains("确定") || t.contains("完成")
+                            || t.contains("解锁") || t.equals("OK") || t.contains("Enter");
+                }
+            });
+            if (ok != null) {
+                tapNode(ok);
+            }
+            sleep(1400);
+            if (!isLocked()) {
+                log("✅ 已通过无障碍输入 PIN 解锁");
+                return true;
+            }
+            log("第 " + attempt + " 次输入 PIN 后仍处于锁屏");
+        }
+        return false;
+    }
+
+    /** 先试无障碍点击;有些锁屏节点不接受 ACTION_CLICK,就按坐标点一下。 */
+    private void tapNode(AccessibilityNodeInfo n) {
+        try {
+            if (n.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                return;
+            }
+        } catch (Exception ignored) {
+        }
+        try {
+            Rect r = bounds(n);
+            gestureTap(r.centerX(), r.centerY());
+        } catch (Exception ignored) {
+        }
     }
 
     /** 实验性:Root 解锁。自动尝试 4 种手势进入 PIN 页,每种后尝试输入;全程截图存证。 */

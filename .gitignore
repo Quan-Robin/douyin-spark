@@ -58,3 +58,15 @@ douyin-spark-mobile/*.apk
 /.tmp*/
 /.fix*/
 /.scratch*/
+
+# ============================================================
+# 白名单:本仓库根目录是共享工作区(还有其他项目的产物)
+# 所以只允许下列路径进版本库,其余一律忽略
+/*/
+!/.gitignore
+!/.gitattributes
+!/README.md
+!/LICENSE
+!/docs/
+!/douyin-spark-mobile/
+!/douyin-spark-keeper/

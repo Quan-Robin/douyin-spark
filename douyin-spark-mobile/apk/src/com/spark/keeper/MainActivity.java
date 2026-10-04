@@ -777,14 +777,21 @@ public class MainActivity extends Activity {
         root.addView(Ui.spacer(this, 12));
 
         LinearLayout cardR = card();
-        cardR.addView(Ui.section(this, "Root 解锁(实验性,仅数字密码有效)"));
+        cardR.addView(Ui.section(this, "锁屏自动解锁(仅 PIN/数字密码有效;指纹、人脸无法模拟)"));
         sRoot = new CheckBox(this);
-        sRoot.setText("Root 自动输入 PIN 解锁(需已授权 Root)");
+        sRoot.setText("优先用 Root 解锁(没有 root 就别勾,免 root 通道会自动生效)");
         sRoot.setTextSize(13);
         cardR.addView(sRoot);
-        sPin = Ui.input(this, "锁屏 PIN 码(仅勾选 Root 解锁时使用)");
+        sPin = Ui.input(this, "锁屏 PIN 码(免 root 也会用它点锁屏键盘)");
         sPin.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         cardR.addView(sPin, lpFull());
+        TextView pinHint = Ui.label(this,
+                "免 root 也能自动解锁:填好 PIN 即可 —— 运行时会用无障碍服务点锁屏键盘输入"
+                + "(部分 ROM 不允许无障碍访问锁屏,失败就等你解锁后补跑)。\n"
+                + "不想填 PIN?两个零成本办法:① 系统「Smart Lock → 信任地点/设备」,在家锁屏会变成滑动解锁;"
+                + "② 开发者选项里开「不锁定屏幕(充电时)」。");
+        pinHint.setPadding(0, Ui.dp(this, 6), 0, 0);
+        cardR.addView(pinHint);
         sPin.addTextChangedListener(new android.text.TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int a, int b, int c) {

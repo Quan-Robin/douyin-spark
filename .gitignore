@@ -70,3 +70,8 @@ douyin-spark-mobile/*.apk
 !/docs/
 !/douyin-spark-mobile/
 !/douyin-spark-keeper/
+# 共享工作区:docs/ 只跟踪本项目自己的文档,别把别人的文档扫进来
+/docs/*
+!/docs/douyin-web-chat-selectors.md
+!/docs/publishing-checklist.md
+!/docs/release-notes-*.md

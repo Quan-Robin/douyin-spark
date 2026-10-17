@@ -59,7 +59,9 @@ public class Prefs {
                 .replace(";", ",")
                 .replace("；", ",");
         List<Friend> out = new ArrayList<>();
-        for (String line : normalized.split("\n")) {
+                // 容忍任意换行符:CRLF、单独 CR、以及 Unicode 行分隔符；
+        // 复制粘贴来的名单常带 CR,以前按换行切分后残留的字符只靠 trim 兜住
+        for (String line : normalized.split("[\r\n\u2028\u2029]+")) {
             String t = line.trim();
             if (t.isEmpty()) {
                 continue;
@@ -92,7 +94,7 @@ public class Prefs {
     }
 
     public List<String> messages() {
-        List<String> m = split(sp.getString("messages", ""), "\n");
+        List<String> m = split(sp.getString("messages", ""), "[\r\n\u2028\u2029]+");
         if (m.isEmpty()) {
             m.add("续火花啦 🔥");
         }

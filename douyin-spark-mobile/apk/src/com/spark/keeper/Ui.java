@@ -383,6 +383,25 @@ public final class Ui {
         return ed;
     }
 
+    /**
+     * 多行输入框(好友名、消息池这类"每行一条"的字段必须用它)。
+     *
+     * 普通 EditText 不声明 MULTI_LINE 时,不少输入法会把回车键做成「完成/发送」动作键,
+     * 按回车不会插入换行 —— 用户看着是换行,实际文本里没有 \n,
+     * 于是一整段被当成"一个名字",只发第一个人。
+     * 这里同时设置 multi-line 输入类型与 IME_FLAG_NO_ENTER_ACTION,强制回车插入换行。
+     */
+    public static EditText inputMulti(Context c, String hint) {
+        EditText ed = input(c, hint);
+        ed.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        ed.setSingleLine(false);
+        ed.setImeOptions(android.view.inputmethod.EditorInfo.IME_FLAG_NO_ENTER_ACTION);
+        ed.setGravity(Gravity.TOP);
+        ed.setMinLines(3);
+        return ed;
+    }
+
     /** 统一样式的复选框:主色勾选、更大文字与触控区域。 */
     public static CheckBox check(Context c, String text) {
         CheckBox cb = new CheckBox(c);

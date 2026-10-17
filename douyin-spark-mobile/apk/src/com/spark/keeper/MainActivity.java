@@ -608,12 +608,10 @@ public class MainActivity extends Activity {
 
         LinearLayout cfgCard = card();
         cfgCard.addView(Ui.section(this, "② 好友名(填消息列表里显示的名字;多个用逗号或换行分隔;专属消息:名字=消息1|消息2)"));
-        aFriends = Ui.input(this, "如: 小明,小红=专属消息A|专属消息B");
+        aFriends = Ui.inputMulti(this, "如: 小明,小红=专属消息A|专属消息B\n(多个好友用逗号或回车换行分隔)");
         cfgCard.addView(aFriends, lpFull());
         cfgCard.addView(Ui.section(this, "③ 消息池(每行一条,随机发送;支持 {{friend}} 占位符)"));
-        aMsgs = Ui.input(this, "续火花啦 🔥\n今日份火花已续上 🔥");
-        aMsgs.setMinLines(3);
-        aMsgs.setGravity(Gravity.TOP);
+        aMsgs = Ui.inputMulti(this, "续火花啦 🔥\n今日份火花已续上 🔥");
         cfgCard.addView(aMsgs, lpFull());
         aTime = Ui.input(this, "21:30");
         cfgCard.addView(timeRow(aTime));
@@ -702,12 +700,10 @@ public class MainActivity extends Activity {
 
         LinearLayout cfgCard = card();
         cfgCard.addView(Ui.section(this, "③ 好友名(填消息列表里显示的名字;多个用逗号或换行分隔;专属消息:名字=消息1|消息2)"));
-        pFriends = Ui.input(this, "如: 小明,小红=专属消息A|专属消息B");
+        pFriends = Ui.inputMulti(this, "如: 小明,小红=专属消息A|专属消息B\n(多个好友用逗号或回车换行分隔)");
         cfgCard.addView(pFriends, lpFull());
         cfgCard.addView(Ui.section(this, "④ 消息池(每行一条,随机发送;支持 {{friend}} 占位符)"));
-        pMsgs = Ui.input(this, "续火花啦 🔥\n今日份火花已续上 🔥");
-        pMsgs.setMinLines(3);
-        pMsgs.setGravity(Gravity.TOP);
+        pMsgs = Ui.inputMulti(this, "续火花啦 🔥\n今日份火花已续上 🔥");
         cfgCard.addView(pMsgs, lpFull());
         pTime = Ui.input(this, "21:30");
         cfgCard.addView(timeRow(pTime));
@@ -1445,6 +1441,10 @@ public class MainActivity extends Activity {
         p.setProtocolMode(false);
         // 页面上只有一个时间输入框:把它真正应用到调度用的 times 列表,
         // 否则调度只读 times,用户在这里改的时间会被静默忽略
+        // 明确回显"识别到几个好友":换行/逗号没生效时用户当场就能发现,
+        // 不会等到第二天才发现"只发了一个人"
+        Toast.makeText(this, "已保存 " + p.friends().size() + " 个好友",
+                Toast.LENGTH_SHORT).show();
         if (p.applySingleTime(time)) {
             Toast.makeText(this, "已把每天发送时间设为 " + time + "(多时间点请在「基本设置」配置)",
                     Toast.LENGTH_LONG).show();
@@ -1471,6 +1471,8 @@ public class MainActivity extends Activity {
                 p.jitterMin(),
                 pTest.isChecked(), p.handleLockscreen(), p.lockAfterDone(), p.waitUnlockMin());
         p.setProtocolMode(true);
+        Toast.makeText(this, "已保存 " + p.friends().size() + " 个好友",
+                Toast.LENGTH_SHORT).show();
         if (p.applySingleTime(time)) {
             Toast.makeText(this, "已把每天发送时间设为 " + time + "(多时间点请在「基本设置」配置)",
                     Toast.LENGTH_LONG).show();
